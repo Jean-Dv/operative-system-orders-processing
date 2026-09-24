@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections.abc import Sequence
 
 from src.server import OrderServer, ServerAddress
 from src.system import SystemManager
+
+
+def configure_logging() -> None:
+    """Configure human-readable operational events for the system process."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | PID=%(process)d | %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +53,7 @@ def positive_int(value: str) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    configure_logging()
     manager = SystemManager()
     identity = manager.start()
     server = OrderServer(manager, args.host, args.port)
@@ -66,6 +77,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{address.host}:{address.port}",
                 flush=True,
             )
+        logging.getLogger("order_system").info(
+            "Sistema preparado para recibir pedidos | direccion=%s:%s",
+            address.host,
+            address.port,
+        )
 
     try:
         server.serve(max_orders=args.max_orders, on_ready=announce_ready)
@@ -76,6 +92,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         manager.stop()
 
     stopped = {"event": "stopped", "orders": summary}
+    logging.getLogger("order_system").info(
+        "Sistema detenido | pedidos_registrados=%s",
+        summary["total"],
+    )
     if args.json:
         print(json.dumps(stopped, sort_keys=True), flush=True)
     else:

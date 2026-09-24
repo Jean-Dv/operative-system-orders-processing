@@ -128,6 +128,9 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(ready["ppid"], os.getpid())
         self.assertTrue(all(item["status"] == "accepted" for item in responses))
         self.assertEqual(stopped["orders"], {"total": 3, "pending": 3})
+        self.assertEqual(system_stderr.count("Pedido recibido"), 3)
+        self.assertEqual(system_stderr.count("etapa=validacion resultado=correcto"), 3)
+        self.assertEqual(system_stderr.count("Pedido registrado"), 3)
 
     @staticmethod
     def _stop_process(process: subprocess.Popen[str]) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import socket
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -10,6 +11,9 @@ from typing import Any
 from src.orders import Order
 from src.protocol import ProtocolError, receive_message, send_message
 from src.system import SystemManager
+
+
+LOGGER = logging.getLogger("order_system.server")
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,22 +75,45 @@ class OrderServer:
                 on_ready(ServerAddress(bound_host, bound_port))
 
             while max_orders is None or accepted_orders < max_orders:
-                connection, _ = listener.accept()
+                connection, client_address = listener.accept()
                 with connection:
+                    LOGGER.info(
+                        "Cliente conectado | ip=%s puerto=%s",
+                        client_address[0],
+                        client_address[1],
+                    )
                     if self._handle_client(connection):
                         accepted_orders += 1
 
     def _handle_client(self, connection: socket.socket) -> bool:
         try:
             order = order_from_message(receive_message(connection))
+            LOGGER.info(
+                "Pedido recibido | id=%s cliente=%s producto=%s cantidad=%s",
+                order.order_id,
+                order.customer_id,
+                order.product_id,
+                order.quantity,
+            )
+            LOGGER.info(
+                "Procesando pedido | id=%s etapa=validacion resultado=correcto",
+                order.order_id,
+            )
             self._manager.register_order(order)
         except (ProtocolError, ValueError) as error:
+            LOGGER.warning("Pedido rechazado | motivo=%s", error)
             send_message(connection, {"status": "error", "message": str(error)})
             return False
 
+        summary = self._manager.summary()
+        LOGGER.info(
+            "Pedido registrado | id=%s estado=%s total_pendientes=%s",
+            order.order_id,
+            order.status.value,
+            summary.get("pending", 0),
+        )
         send_message(
             connection,
             {"status": "accepted", "order_id": order.order_id},
         )
         return True
-
