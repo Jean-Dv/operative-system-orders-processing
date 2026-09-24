@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import time
 import logging
 import socket
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -53,10 +55,12 @@ class OrderServer:
         manager: SystemManager,
         host: str = "127.0.0.1",
         port: int = 5000,
+        processing_delay: float = 2.0,
     ) -> None:
         self._manager = manager
         self._host = host
         self._port = port
+        self._processing_delay = processing_delay
 
     def serve(
         self,
@@ -96,7 +100,13 @@ class OrderServer:
                 order.quantity,
             )
             LOGGER.info(
-                "Procesando pedido | id=%s etapa=validacion resultado=correcto",
+                "Procesamiento iniciado | id=%s demora_simulada=%.2fs",
+                order.order_id,
+                self._processing_delay,
+            )
+            time.sleep(self._processing_delay)
+            LOGGER.info(
+                "Validacion completada | id=%s resultado=correcto",
                 order.order_id,
             )
             self._manager.register_order(order)
@@ -107,7 +117,7 @@ class OrderServer:
 
         summary = self._manager.summary()
         LOGGER.info(
-            "Pedido registrado | id=%s estado=%s total_pendientes=%s",
+            "Procesamiento finalizado | id=%s estado=%s total_pendientes=%s",
             order.order_id,
             order.status.value,
             summary.get("pending", 0),

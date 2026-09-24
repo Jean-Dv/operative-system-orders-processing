@@ -36,6 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument(
+        "--processing-delay",
+        type=non_negative_float,
+        default=2.0,
+        help="seconds spent processing each order sequentially (default: 2)",
+    )
+    parser.add_argument(
         "--max-orders",
         type=positive_int,
         default=None,
@@ -51,12 +57,24 @@ def positive_int(value: str) -> int:
     return parsed
 
 
+def non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be zero or greater")
+    return parsed
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     configure_logging()
     manager = SystemManager()
     identity = manager.start()
-    server = OrderServer(manager, args.host, args.port)
+    server = OrderServer(
+        manager,
+        args.host,
+        args.port,
+        processing_delay=args.processing_delay,
+    )
 
     def announce_ready(address: ServerAddress) -> None:
         details = {

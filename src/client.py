@@ -26,6 +26,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--customer-id", required=True)
     parser.add_argument("--product-id", required=True)
     parser.add_argument("--quantity", type=positive_int, required=True)
+    parser.add_argument(
+        "--timeout",
+        type=positive_int,
+        default=30,
+        help="seconds to wait for the sequential server (default: 30)",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -41,7 +47,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "quantity": args.quantity,
     }
 
-    with socket.create_connection((args.host, args.port), timeout=5) as connection:
+    with socket.create_connection(
+        (args.host, args.port), timeout=args.timeout
+    ) as connection:
         send_message(connection, request)
         response = receive_message(connection)
 
@@ -56,4 +64,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

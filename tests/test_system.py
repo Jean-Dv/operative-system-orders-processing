@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import unittest
 
 from src.orders import Order, OrderStatus
@@ -78,6 +79,8 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 "0",
                 "--max-orders",
                 "3",
+                "--processing-delay",
+                "0.15",
                 "--json",
             ],
             stdout=subprocess.PIPE,
@@ -88,6 +91,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(system_process.stdout)
         ready = json.loads(system_process.stdout.readline())
 
+        processing_started_at = time.monotonic()
         clients = [
             subprocess.Popen(
                 [
@@ -112,13 +116,16 @@ class MainProcessIntegrationTests(unittest.TestCase):
             )
             for sequence in range(1, 4)
         ]
+        for client in clients:
+            self.addCleanup(self._stop_process, client)
         responses = []
         for client in clients:
-            stdout, stderr = client.communicate(timeout=5)
+            stdout, stderr = client.communicate(timeout=15)
             self.assertEqual(client.returncode, 0, stderr)
             responses.append(json.loads(stdout))
 
-        remaining_stdout, system_stderr = system_process.communicate(timeout=5)
+        remaining_stdout, system_stderr = system_process.communicate(timeout=15)
+        processing_elapsed = time.monotonic() - processing_started_at
         stopped = json.loads(remaining_stdout)
 
         self.assertEqual(system_process.returncode, 0, system_stderr)
@@ -129,14 +136,36 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "accepted" for item in responses))
         self.assertEqual(stopped["orders"], {"total": 3, "pending": 3})
         self.assertEqual(system_stderr.count("Pedido recibido"), 3)
-        self.assertEqual(system_stderr.count("etapa=validacion resultado=correcto"), 3)
-        self.assertEqual(system_stderr.count("Pedido registrado"), 3)
+        self.assertEqual(system_stderr.count("Procesamiento iniciado"), 3)
+        self.assertEqual(system_stderr.count("Procesamiento finalizado"), 3)
+        self.assertGreaterEqual(processing_elapsed, 0.4)
+
+        processing_events = [
+            line
+            for line in system_stderr.splitlines()
+            if "Procesamiento iniciado" in line or "Procesamiento finalizado" in line
+        ]
+        for index in range(0, len(processing_events), 2):
+            started, finished = processing_events[index : index + 2]
+            self.assertIn("Procesamiento iniciado", started)
+            self.assertIn("Procesamiento finalizado", finished)
+            started_order_id = started.split("id=", 1)[1].split()[0]
+            finished_order_id = finished.split("id=", 1)[1].split()[0]
+            self.assertEqual(started_order_id, finished_order_id)
 
     @staticmethod
     def _stop_process(process: subprocess.Popen[str]) -> None:
         if process.poll() is None:
             process.terminate()
-            process.wait(timeout=5)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stderr is not None:
+            process.stderr.close()
 
 
 if __name__ == "__main__":
