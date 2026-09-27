@@ -3,7 +3,7 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 8
+## Estado actual: fase 9
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
 pedidos por TCP, los valida y actúa como productor al insertarlos en una
@@ -107,11 +107,35 @@ python -m src.main \
 
 Los hilos se bloquean realmente al adquirir el segundo recurso. La simulación se
 ejecuta en un proceso hijo aislado; el timeout solo permite al proceso padre
-diagnosticar y finalizar la demostración. No es todavía una estrategia de
-prevención.
+diagnosticar y finalizar la demostración.
 
 El diagnóstico informa exclusión mutua, retención y espera, ausencia de
 expropiación y espera circular: las cuatro condiciones de Coffman.
+
+## Prevención del interbloqueo
+
+La estrategia elegida es un **orden global de adquisición**. Todos los hilos
+solicitan los recursos en esta secuencia:
+
+```text
+inventory_lock → invoice_lock
+```
+
+Como ningún hilo puede adquirir `invoice_lock` primero y después esperar
+`inventory_lock`, se elimina la espera circular. Los locks continúan garantizando
+exclusión mutua y no se depende de timeouts para completar los pedidos.
+
+Ejecute la comparación corregida:
+
+```bash
+python -m src.main \
+  --scenario deadlock-safe \
+  --deadlock-timeout 0.25 \
+  --json
+```
+
+El resultado debe indicar los dos pedidos completados, `prevented=true`,
+`deadlock_detected=false` y `circular_wait=false`.
 
 La demora indicada se reparte entre las cuatro etapas. Todos los trabajadores
 acceden al mismo inventario. El modo predeterminado `normal` utiliza exclusión
@@ -174,5 +198,5 @@ ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas verifican la cola, el procesamiento concurrente, los escenarios
-`race`/`safe` y la detección aislada de los dos hilos interbloqueados.
+Las pruebas verifican la cola, los escenarios `race`/`safe`, la detección del
+interbloqueo y su prevención mediante orden global de recursos.

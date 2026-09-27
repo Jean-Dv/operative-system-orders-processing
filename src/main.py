@@ -10,7 +10,10 @@ from dataclasses import asdict
 
 from src.orders import OrderStatus
 from src.server import OrderServer, ServerAddress
-from src.scenarios.deadlock_demo import simulate_deadlock
+from src.scenarios.deadlock_demo import (
+    simulate_deadlock,
+    simulate_deadlock_prevention,
+)
 from src.system import SystemManager
 from src.workers import WorkerPool
 
@@ -68,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--scenario",
-        choices=("normal", "race", "safe", "deadlock"),
+        choices=("normal", "race", "safe", "deadlock", "deadlock-safe"),
         default="normal",
         help="compare the unsafe 'race' and mutex-protected 'safe' scenarios",
     )
@@ -111,19 +114,31 @@ def positive_float(value: str) -> float:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     configure_logging()
-    if args.scenario == "deadlock":
-        report = simulate_deadlock(args.deadlock_timeout)
-        payload = {"event": "deadlock_diagnosis", **asdict(report)}
-        logging.getLogger("order_system").warning(
-            "Interbloqueo detectado=%s | hilos_bloqueados=%s",
-            report.detected,
-            len(report.blocked_threads),
-        )
+    if args.scenario in {"deadlock", "deadlock-safe"}:
+        if args.scenario == "deadlock":
+            report = simulate_deadlock(args.deadlock_timeout)
+            payload = {"event": "deadlock_diagnosis", **asdict(report)}
+            successful = report.detected
+            logging.getLogger("order_system").warning(
+                "Interbloqueo detectado=%s | hilos_bloqueados=%s",
+                report.detected,
+                len(report.blocked_threads),
+            )
+        else:
+            report = simulate_deadlock_prevention(args.deadlock_timeout)
+            payload = {"event": "deadlock_prevention", **asdict(report)}
+            successful = report.prevented
+            logging.getLogger("order_system").info(
+                "Interbloqueo evitado=%s | estrategia=%s orden=%s",
+                report.prevented,
+                report.strategy,
+                "->".join(report.acquisition_order),
+            )
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:
             print(json.dumps(payload, indent=2, sort_keys=True))
-        return 0 if report.detected else 1
+        return 0 if successful else 1
 
     manager = SystemManager()
     identity = manager.start()

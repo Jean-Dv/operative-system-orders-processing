@@ -41,4 +41,4 @@ ORDER-B (deadlock-order-b) holds invoice_lock and waits for inventory_lock
 Los locks no usan timeout: ambos hilos permanecen bloqueados. El escenario corre
 en un proceso hijo con hilos daemon para que el detector externo pueda registrar
 la evidencia y finalizar el proceso aislado sin congelar la aplicación ni los
-tests. La estrategia preventiva se implementará en la fase siguiente.
+tests. La comparación corregida está en `evidence/deadlock-fixed.md`.
