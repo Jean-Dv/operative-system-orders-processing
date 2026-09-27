@@ -3,7 +3,7 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 9
+## Estado actual: fases 10 y 11
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
 pedidos por TCP, los valida y actúa como productor al insertarlos en una
@@ -200,3 +200,30 @@ python -m unittest discover -s tests -v
 
 Las pruebas verifican la cola, los escenarios `race`/`safe`, la detección del
 interbloqueo y su prevención mediante orden global de recursos.
+
+## Pruebas de carga y evidencia del sistema
+
+La matriz reproducible compara el procesamiento secuencial, el procesamiento
+concurrente, la condición de carrera y su corrección con mutex. Cada escenario
+recibe 100, 500 y 1.000 pedidos mediante hasta 100 clientes TCP concurrentes:
+
+```bash
+python scripts/run_experiments.py \
+  --quantities 100 500 1000 \
+  --concurrency 100
+```
+
+Durante cada ejecución se muestrean el PID y PPID del servidor y sus
+trabajadores, identificadores de hilos, uso agregado de CPU, RSS y memoria
+virtual. Los artefactos quedan en `evidence/load-tests/`:
+
+- `report.md`: tabla comparativa y comando de reproducción;
+- `results.csv`: métricas por escenario y carga;
+- `summary.json`: configuración, procesos y resultados estructurados;
+- `resource-samples.json`: serie temporal de PID, PPID, hilos, CPU y memoria;
+- `trace-excerpts.json`: fragmentos de las trazas demostrativas.
+
+La presentación de resultados, metodología y soluciones está disponible como
+[PowerPoint editable con estilo UPTC](docs/presentacion-procesamiento-pedidos-uptc.pptx),
+[PDF local](docs/presentacion-procesamiento-pedidos.pdf) y como
+[diseño editable en Canva](https://canva.link/98qijdlpmst2ims).

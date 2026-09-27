@@ -24,6 +24,10 @@ class WorkerPoolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "queue_capacity"):
             WorkerPool(1, queue_capacity=0)
 
+    def test_requires_positive_initial_stock(self) -> None:
+        with self.assertRaisesRegex(ValueError, "initial_stock"):
+            WorkerPool(1, initial_stock=0)
+
 
 if __name__ == "__main__":
     unittest.main()

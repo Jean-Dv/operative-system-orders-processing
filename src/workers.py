@@ -8,7 +8,7 @@ import os
 import signal
 import threading
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from multiprocessing.connection import Connection
 
 from src.orders import Order, OrderStatus
@@ -193,6 +193,7 @@ class WorkerPool:
         race_window: float = 0.0,
         use_inventory_lock: bool = True,
         queue_capacity: int = 100,
+        initial_stock: int = 100,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be greater than zero")
@@ -204,20 +205,27 @@ class WorkerPool:
             raise ValueError("race_window cannot be negative")
         if queue_capacity <= 0:
             raise ValueError("queue_capacity must be greater than zero")
+        if initial_stock <= 0:
+            raise ValueError("initial_stock must be greater than zero")
 
         self._worker_count = worker_count
         self._processing_delay = processing_delay
         self._threads_per_worker = threads_per_worker
         self._context = mp.get_context("spawn")
         self._task_queue = self._context.JoinableQueue(maxsize=queue_capacity)
+        products = tuple(
+            replace(product, initial_stock=initial_stock)
+            for product in DEFAULT_PRODUCTS
+        )
         shared_stock = self._context.Array(
             "i",
-            [product.initial_stock for product in DEFAULT_PRODUCTS],
+            [product.initial_stock for product in products],
             lock=False,
         )
         inventory_lock = self._context.Lock() if use_inventory_lock else None
         self._inventory = SharedInventory(
             shared_stock,
+            products=products,
             race_window=race_window,
             lock=inventory_lock,
         )

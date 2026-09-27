@@ -64,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum pending orders in the producer-consumer queue (default: 100)",
     )
     parser.add_argument(
+        "--initial-stock",
+        type=positive_int,
+        default=100,
+        help="initial stock assigned to every product (default: 100)",
+    )
+    parser.add_argument(
         "--processing-delay",
         type=non_negative_float,
         default=2.0,
@@ -80,6 +86,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=positive_float,
         default=0.25,
         help="seconds to wait before diagnosing the deadlock (default: 0.25)",
+    )
+    parser.add_argument(
+        "--race-window",
+        type=non_negative_float,
+        default=0.1,
+        help="seconds between inventory read and write in race/safe scenarios",
     )
     parser.add_argument(
         "--max-orders",
@@ -146,9 +158,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.workers,
         args.processing_delay,
         args.threads_per_worker,
-        race_window=0.1 if args.scenario in {"race", "safe"} else 0.0,
+        race_window=args.race_window if args.scenario in {"race", "safe"} else 0.0,
         use_inventory_lock=args.scenario != "race",
         queue_capacity=args.queue_capacity,
+        initial_stock=args.initial_stock,
     )
     worker_pool.start()
     server = OrderServer(
