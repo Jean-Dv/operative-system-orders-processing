@@ -30,6 +30,7 @@ class InventoryUpdate:
     product_id: str
     previous_stock: int
     current_stock: int
+    lock_used: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +112,12 @@ class SharedStock(Protocol):
     def __setitem__(self, index: int, value: int) -> None: ...
 
 
+class SharedLock(Protocol):
+    def __enter__(self) -> object: ...
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None: ...
+
+
 class SharedInventory:
     """Inventory stored in memory shared by every worker process."""
 
@@ -119,6 +126,7 @@ class SharedInventory:
         stock: SharedStock,
         products: tuple[Product, ...] = DEFAULT_PRODUCTS,
         race_window: float = 0.0,
+        lock: SharedLock | None = None,
     ) -> None:
         if race_window < 0:
             raise ValueError("race_window cannot be negative")
@@ -128,6 +136,7 @@ class SharedInventory:
             product.product_id: index for index, product in enumerate(products)
         }
         self._race_window = race_window
+        self._lock = lock
 
     def product(self, product_id: str) -> Product | None:
         return self._products.get(product_id)
@@ -152,6 +161,17 @@ class SharedInventory:
         }
 
     def deduct(self, order: Order) -> InventoryUpdate:
+        if self._lock is not None:
+            with self._lock:
+                return self._deduct_unsafe_steps(order, lock_used=True)
+        return self._deduct_unsafe_steps(order, lock_used=False)
+
+    def _deduct_unsafe_steps(
+        self,
+        order: Order,
+        *,
+        lock_used: bool,
+    ) -> InventoryUpdate:
         index = self._indexes[order.product_id]
         previous_stock = self._stock[index]
         if previous_stock < order.quantity:
@@ -164,7 +184,12 @@ class SharedInventory:
         time.sleep(self._race_window)
         current_stock = previous_stock - order.quantity
         self._stock[index] = current_stock
-        return InventoryUpdate(order.product_id, previous_stock, current_stock)
+        return InventoryUpdate(
+            order.product_id,
+            previous_stock,
+            current_stock,
+            lock_used=lock_used,
+        )
 
 
 class OrderProcessor:
@@ -210,6 +235,7 @@ class OrderProcessor:
                     {
                         "previous_stock": inventory_update.previous_stock,
                         "current_stock": inventory_update.current_stock,
+                        "mutex": "lock" if inventory_update.lock_used else "none",
                     },
                 )
             )

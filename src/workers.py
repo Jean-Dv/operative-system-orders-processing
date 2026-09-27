@@ -169,6 +169,7 @@ class WorkerPool:
         processing_delay: float = 2.0,
         threads_per_worker: int = 2,
         race_window: float = 0.0,
+        use_inventory_lock: bool = True,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be greater than zero")
@@ -188,10 +189,13 @@ class WorkerPool:
             [product.initial_stock for product in DEFAULT_PRODUCTS],
             lock=False,
         )
+        inventory_lock = self._context.Lock() if use_inventory_lock else None
         self._inventory = SharedInventory(
             shared_stock,
             race_window=race_window,
+            lock=inventory_lock,
         )
+        self._inventory_lock_enabled = use_inventory_lock
         self._workers: list[_WorkerHandle] = []
         self._next_worker = 0
 
@@ -206,6 +210,10 @@ class WorkerPool:
     @property
     def initial_inventory_snapshot(self) -> dict[str, int]:
         return self._inventory.initial_snapshot()
+
+    @property
+    def inventory_lock_enabled(self) -> bool:
+        return self._inventory_lock_enabled
 
     def start(self) -> None:
         if self._workers:

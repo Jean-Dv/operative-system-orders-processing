@@ -3,7 +3,7 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fases 4 y 5
+## Estado actual: fase 6
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
 pedidos por TCP, los valida, los registra y los asigna en round-robin a procesos
@@ -12,9 +12,9 @@ procesar varios pedidos concurrentemente. El registro sigue siendo local al
 proceso principal.
 
 El inventario utiliza un `multiprocessing.RawArray` único: el proceso principal,
-los trabajadores y sus hilos observan los mismos valores. La actualización es
-intencionalmente insegura para demostrar una condición de carrera antes de
-corregirla con exclusión mutua.
+los trabajadores y sus hilos observan los mismos valores. Un
+`multiprocessing.Lock` protege toda actualización de inventario en los modos
+`normal` y `safe`. El modo `race` conserva la versión insegura como evidencia.
 
 Cada trabajador ejecuta el pipeline completo:
 
@@ -68,8 +68,8 @@ python -m src.main --processing-delay 5
 ```
 
 La demora indicada se reparte entre las cuatro etapas. Todos los trabajadores
-acceden al mismo inventario. El modo normal no amplía artificialmente la ventana
-de carrera, pero todavía carece de bloqueo.
+acceden al mismo inventario. El modo predeterminado `normal` utiliza exclusión
+mutua sin ampliar artificialmente la ventana de carrera.
 
 ## Demostración de la condición de carrera
 
@@ -92,7 +92,24 @@ lo que al cerrar el sistema se obtiene una evidencia como:
 Condicion de carrera detectada | esperado={'PRODUCT-001': 98, ...} real={'PRODUCT-001': 99, ...}
 ```
 
-No se utiliza `Lock` todavía; la exclusión mutua corresponde a la fase siguiente.
+## Corrección con exclusión mutua
+
+El escenario `safe` conserva la misma ventana ampliada, pero protege la secuencia
+leer-validar-calcular-escribir con un único `Lock` compartido:
+
+```bash
+python -m src.main \
+  --workers 1 \
+  --threads-per-worker 2 \
+  --scenario safe \
+  --processing-delay 2
+```
+
+Para los mismos dos pedidos, las trazas muestran `100 → 99` y después `99 → 98`:
+
+```text
+Exclusion mutua verificada | esperado={'PRODUCT-001': 98, ...} real={'PRODUCT-001': 98, ...}
+```
 
 Al detener el sistema, los trabajadores devuelven los resultados por sus canales
 `Pipe`. El proceso principal consolida entonces los estados finales
@@ -111,5 +128,5 @@ ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas validan el dominio, los procesos e hilos, la visibilidad del
-inventario compartido y la pérdida reproducible de una actualización.
+Las pruebas comparan la pérdida reproducible de una actualización en `race` con
+el resultado consistente obtenido bajo el mismo escenario temporal en `safe`.

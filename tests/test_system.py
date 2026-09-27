@@ -217,6 +217,38 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(len(worker_one_thread_names), 2)
 
     def test_shared_inventory_exposes_a_reproducible_race(self) -> None:
+        stopped, system_stderr = self._run_inventory_scenario("race")
+
+        self.assertEqual(stopped["inventory"]["expected"]["PRODUCT-001"], 98)
+        self.assertEqual(stopped["inventory"]["actual"]["PRODUCT-001"], 99)
+        self.assertTrue(stopped["inventory"]["race_detected"])
+        self.assertFalse(stopped["inventory"]["lock_enabled"])
+        self.assertEqual(
+            system_stderr.count(
+                "previous_stock=100 current_stock=99 mutex=none"
+            ),
+            2,
+        )
+        self.assertIn("Condicion de carrera detectada", system_stderr)
+
+    def test_mutex_prevents_the_inventory_race(self) -> None:
+        stopped, system_stderr = self._run_inventory_scenario("safe")
+
+        self.assertEqual(stopped["inventory"]["expected"]["PRODUCT-001"], 98)
+        self.assertEqual(stopped["inventory"]["actual"]["PRODUCT-001"], 98)
+        self.assertFalse(stopped["inventory"]["race_detected"])
+        self.assertTrue(stopped["inventory"]["lock_enabled"])
+        self.assertIn(
+            "previous_stock=100 current_stock=99 mutex=lock",
+            system_stderr,
+        )
+        self.assertIn(
+            "previous_stock=99 current_stock=98 mutex=lock",
+            system_stderr,
+        )
+        self.assertIn("Exclusion mutua verificada", system_stderr)
+
+    def _run_inventory_scenario(self, scenario: str) -> tuple[dict, str]:
         system_process = subprocess.Popen(
             [
                 sys.executable,
@@ -233,7 +265,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 "--processing-delay",
                 "0.20",
                 "--scenario",
-                "race",
+                scenario,
                 "--json",
             ],
             stdout=subprocess.PIPE,
@@ -253,7 +285,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
                     "--port",
                     str(ready["port"]),
                     "--order-id",
-                    f"ORD-RACE-{sequence}",
+                    f"ORD-{scenario.upper()}-{sequence}",
                     "--customer-id",
                     f"CUSTOMER-{sequence}",
                     "--product-id",
@@ -278,10 +310,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
         stopped = json.loads(remaining_stdout)
 
         self.assertEqual(system_process.returncode, 0, system_stderr)
-        self.assertEqual(stopped["inventory"]["expected"]["PRODUCT-001"], 98)
-        self.assertEqual(stopped["inventory"]["actual"]["PRODUCT-001"], 99)
-        self.assertTrue(stopped["inventory"]["race_detected"])
-        self.assertIn("Condicion de carrera detectada", system_stderr)
+        return stopped, system_stderr
 
     @staticmethod
     def _stop_process(process: subprocess.Popen[str]) -> None:

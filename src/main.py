@@ -60,9 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--scenario",
-        choices=("normal", "race"),
+        choices=("normal", "race", "safe"),
         default="normal",
-        help="use 'race' to widen the unsafe inventory update window",
+        help="compare the unsafe 'race' and mutex-protected 'safe' scenarios",
     )
     parser.add_argument(
         "--max-orders",
@@ -96,7 +96,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.workers,
         args.processing_delay,
         args.threads_per_worker,
-        race_window=0.1 if args.scenario == "race" else 0.0,
+        race_window=0.1 if args.scenario in {"race", "safe"} else 0.0,
+        use_inventory_lock=args.scenario != "race",
     )
     worker_pool.start()
     server = OrderServer(
@@ -161,6 +162,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_inventory,
             actual_inventory,
         )
+    elif worker_pool.inventory_lock_enabled:
+        logging.getLogger("order_system").info(
+            "Exclusion mutua verificada | esperado=%s real=%s",
+            expected_inventory,
+            actual_inventory,
+        )
 
     stopped = {
         "event": "stopped",
@@ -169,6 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "expected": expected_inventory,
             "actual": actual_inventory,
             "race_detected": race_detected,
+            "lock_enabled": worker_pool.inventory_lock_enabled,
         },
     }
     logging.getLogger("order_system").info(
