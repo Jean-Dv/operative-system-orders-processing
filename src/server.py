@@ -11,7 +11,6 @@ from typing import Any
 from src.orders import Order
 from src.protocol import ProtocolError, receive_message, send_message
 from src.system import SystemManager
-from src.workers import WorkerIdentity
 
 
 LOGGER = logging.getLogger("order_system.server")
@@ -52,7 +51,7 @@ class OrderServer:
     def __init__(
         self,
         manager: SystemManager,
-        dispatch_order: Callable[[Order], WorkerIdentity],
+        dispatch_order: Callable[[Order], None],
         host: str = "127.0.0.1",
         port: int = 5000,
     ) -> None:
@@ -103,7 +102,7 @@ class OrderServer:
                 order.order_id,
             )
             self._manager.register_order(order)
-            worker = self._dispatch_order(order)
+            self._dispatch_order(order)
         except (ProtocolError, ValueError) as error:
             LOGGER.warning("Pedido rechazado | motivo=%s", error)
             send_message(connection, {"status": "error", "message": str(error)})
@@ -111,10 +110,9 @@ class OrderServer:
 
         summary = self._manager.summary()
         LOGGER.info(
-            "Pedido asignado | id=%s worker=%s worker_pid=%s total_pendientes=%s",
+            "Pedido producido | productor=servidor cola=pedidos "
+            "id=%s total_pendientes=%s",
             order.order_id,
-            worker.worker_id,
-            worker.pid,
             summary.get("pending", 0),
         )
         send_message(
@@ -122,7 +120,7 @@ class OrderServer:
             {
                 "status": "accepted",
                 "order_id": order.order_id,
-                "worker_id": worker.worker_id,
+                "queue": "orders",
             },
         )
         return True

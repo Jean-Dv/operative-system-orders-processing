@@ -3,13 +3,13 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 6
+## Estado actual: fase 7
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
-pedidos por TCP, los valida, los registra y los asigna en round-robin a procesos
-trabajadores persistentes. Dentro de cada trabajador, un pool de hilos permite
-procesar varios pedidos concurrentemente. El registro sigue siendo local al
-proceso principal.
+pedidos por TCP, los valida y actúa como productor al insertarlos en una
+`multiprocessing.JoinableQueue`. Los procesos trabajadores compiten como
+consumidores y entregan cada pedido a su pool de hilos. El registro permanece en
+el proceso principal.
 
 El inventario utiliza un `multiprocessing.RawArray` único: el proceso principal,
 los trabajadores y sus hilos observan los mismos valores. Un
@@ -27,7 +27,11 @@ Requisitos: Linux y Python 3.11 o posterior. No se necesitan dependencias
 externas.
 
 ```bash
-python -m src.main --workers 2 --threads-per-worker 2 --processing-delay 2
+python -m src.main \
+  --workers 2 \
+  --threads-per-worker 2 \
+  --queue-capacity 100 \
+  --processing-delay 2
 ```
 
 En otras terminales se pueden ejecutar uno o varios clientes:
@@ -49,7 +53,8 @@ Por cada solicitud, la terminal del sistema muestra su avance real:
 Cliente conectado | ip=127.0.0.1 puerto=54321
 Pedido recibido | id=ORD-... cliente=CUSTOMER-001 producto=PRODUCT-001 cantidad=2
 Validacion completada | id=ORD-... resultado=correcto
-Pedido asignado | id=ORD-... worker=1 worker_pid=1235 total_pendientes=1
+Pedido producido | productor=servidor cola=pedidos id=ORD-...
+Pedido consumido | worker=1 pedido=ORD-...
 Procesamiento iniciado | worker=1 hilo=worker-1-thread_0 pedido=ORD-...
 Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=validation
 Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=inventory_update previous_stock=100 current_stock=98
@@ -66,6 +71,20 @@ el solapamiento:
 ```bash
 python -m src.main --processing-delay 5
 ```
+
+## Cola productor-consumidor
+
+- **Productor:** el proceso principal ejecuta `queue.put(order)` después de
+  validar y registrar la solicitud.
+- **Búfer:** una `JoinableQueue` con capacidad configurable mediante
+  `--queue-capacity` aplica espera al productor cuando está llena.
+- **Consumidores:** los procesos trabajadores ejecutan `queue.get()` y delegan
+  el pedido a un hilo disponible.
+- **Finalización:** el hilo llama `task_done()` al terminar. El administrador usa
+  `queue.join()` y envía un centinela por consumidor durante el cierre.
+
+El cliente confirma que el pedido fue encolado; el consumidor concreto se conoce
+cuando aparece `Pedido consumido` en las trazas del sistema.
 
 La demora indicada se reparte entre las cuatro etapas. Todos los trabajadores
 acceden al mismo inventario. El modo predeterminado `normal` utiliza exclusión
@@ -111,9 +130,9 @@ Para los mismos dos pedidos, las trazas muestran `100 → 99` y después `99 →
 Exclusion mutua verificada | esperado={'PRODUCT-001': 98, ...} real={'PRODUCT-001': 98, ...}
 ```
 
-Al detener el sistema, los trabajadores devuelven los resultados por sus canales
-`Pipe`. El proceso principal consolida entonces los estados finales
-`ready_for_dispatch` o `rejected` antes de imprimir el resumen.
+Al detener el sistema, los trabajadores devuelven los resultados por canales
+`Pipe` reservados para control. El proceso principal consolida entonces los
+estados finales `ready_for_dispatch` o `rejected` antes de imprimir el resumen.
 
 En Linux, la jerarquía puede observarse mientras el sistema está activo:
 
@@ -128,5 +147,6 @@ ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas comparan la pérdida reproducible de una actualización en `race` con
-el resultado consistente obtenido bajo el mismo escenario temporal en `safe`.
+Las pruebas verifican los eventos producidos/consumidos, el cierre de la cola,
+el procesamiento concurrente y la comparación entre los escenarios `race` y
+`safe`.

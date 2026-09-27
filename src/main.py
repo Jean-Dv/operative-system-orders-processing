@@ -53,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="number of order-processing threads per worker (default: 2)",
     )
     parser.add_argument(
+        "--queue-capacity",
+        type=positive_int,
+        default=100,
+        help="maximum pending orders in the producer-consumer queue (default: 100)",
+    )
+    parser.add_argument(
         "--processing-delay",
         type=non_negative_float,
         default=2.0,
@@ -98,6 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.threads_per_worker,
         race_window=0.1 if args.scenario in {"race", "safe"} else 0.0,
         use_inventory_lock=args.scenario != "race",
+        queue_capacity=args.queue_capacity,
     )
     worker_pool.start()
     server = OrderServer(

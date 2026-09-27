@@ -58,7 +58,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif response["status"] == "accepted":
         print(
             f"Order {response['order_id']} accepted by the system "
-            f"and assigned to worker {response['worker_id']}"
+            f"and added to the {response['queue']} queue"
         )
     else:
         print(f"Order rejected: {response['message']}")

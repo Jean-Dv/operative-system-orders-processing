@@ -7,7 +7,7 @@ import multiprocessing as mp
 import os
 import signal
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from multiprocessing.connection import Connection
 
@@ -38,6 +38,7 @@ def _configure_worker_logging() -> None:
 def _worker_main(
     worker_id: int,
     connection: Connection,
+    task_queue: object,
     processing_delay: float,
     threads_per_worker: int,
     inventory: SharedInventory,
@@ -64,27 +65,48 @@ def _worker_main(
         max_workers=threads_per_worker,
         thread_name_prefix=f"worker-{worker_id}-thread",
     ) as executor:
+        pending: set[Future[ProcessingResult]] = set()
         while True:
-            try:
-                order = connection.recv()
-            except EOFError:
-                break
+            if len(pending) >= threads_per_worker:
+                _, pending = wait(pending, return_when=FIRST_COMPLETED)
+
+            order = task_queue.get()
             if order is None:
+                task_queue.task_done()
                 break
-            futures.append(
-                executor.submit(
-                    _process_order,
-                    worker_id,
-                    processor,
-                    order,
-                    processing_delay,
-                )
+            LOGGER.info(
+                "Pedido consumido | worker=%s pedido=%s",
+                worker_id,
+                order.order_id,
             )
+            future = executor.submit(
+                _process_order_and_ack,
+                worker_id,
+                processor,
+                order,
+                processing_delay,
+                task_queue,
+            )
+            futures.append(future)
+            pending.add(future)
 
     results = [future.result() for future in futures]
     connection.send({"event": "stopped", "results": results})
     connection.close()
     LOGGER.info("Trabajador detenido | worker=%s", worker_id)
+
+
+def _process_order_and_ack(
+    worker_id: int,
+    processor: OrderProcessor,
+    order: Order,
+    processing_delay: float,
+    task_queue: object,
+) -> ProcessingResult:
+    try:
+        return _process_order(worker_id, processor, order, processing_delay)
+    finally:
+        task_queue.task_done()
 
 
 def _process_order(
@@ -161,7 +183,7 @@ class _WorkerHandle:
 
 
 class WorkerPool:
-    """Manage child processes and distribute orders round-robin over pipes."""
+    """Manage child processes that consume orders from one shared queue."""
 
     def __init__(
         self,
@@ -170,6 +192,7 @@ class WorkerPool:
         threads_per_worker: int = 2,
         race_window: float = 0.0,
         use_inventory_lock: bool = True,
+        queue_capacity: int = 100,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be greater than zero")
@@ -179,11 +202,14 @@ class WorkerPool:
             raise ValueError("threads_per_worker must be greater than zero")
         if race_window < 0:
             raise ValueError("race_window cannot be negative")
+        if queue_capacity <= 0:
+            raise ValueError("queue_capacity must be greater than zero")
 
         self._worker_count = worker_count
         self._processing_delay = processing_delay
         self._threads_per_worker = threads_per_worker
         self._context = mp.get_context("spawn")
+        self._task_queue = self._context.JoinableQueue(maxsize=queue_capacity)
         shared_stock = self._context.Array(
             "i",
             [product.initial_stock for product in DEFAULT_PRODUCTS],
@@ -197,7 +223,6 @@ class WorkerPool:
         )
         self._inventory_lock_enabled = use_inventory_lock
         self._workers: list[_WorkerHandle] = []
-        self._next_worker = 0
 
     @property
     def identities(self) -> tuple[WorkerIdentity, ...]:
@@ -226,6 +251,7 @@ class WorkerPool:
                 args=(
                     worker_id,
                     child_connection,
+                    self._task_queue,
                     self._processing_delay,
                     self._threads_per_worker,
                     self._inventory,
@@ -248,22 +274,21 @@ class WorkerPool:
             )
             self._workers.append(_WorkerHandle(identity, process, parent_connection))
 
-    def submit(self, order: Order) -> WorkerIdentity:
+    def submit(self, order: Order) -> None:
         if not self._workers:
             raise RuntimeError("worker pool is not running")
 
-        worker = self._workers[self._next_worker]
-        self._next_worker = (self._next_worker + 1) % len(self._workers)
-        worker.connection.send(order)
-        return worker.identity
+        self._task_queue.put(order)
 
     def stop(self) -> tuple[ProcessingResult, ...]:
         if not self._workers:
             return ()
 
         workers, self._workers = self._workers, []
-        for worker in workers:
-            worker.connection.send(None)
+        self._task_queue.join()
+        for _ in workers:
+            self._task_queue.put(None)
+        self._task_queue.join()
 
         results: list[ProcessingResult] = []
         for worker in workers:
@@ -272,4 +297,6 @@ class WorkerPool:
             worker.connection.close()
         for worker in workers:
             worker.process.join()
+        self._task_queue.close()
+        self._task_queue.join_thread()
         return tuple(results)

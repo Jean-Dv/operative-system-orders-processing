@@ -154,12 +154,14 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(ready["pid"], system_process.pid)
         self.assertEqual(ready["ppid"], os.getpid())
         self.assertTrue(all(item["status"] == "accepted" for item in responses))
-        self.assertEqual({item["worker_id"] for item in responses}, {1, 2})
+        self.assertTrue(all(item["queue"] == "orders" for item in responses))
         self.assertEqual(
             stopped["orders"],
             {"total": 3, "ready_for_dispatch": 3},
         )
         self.assertEqual(system_stderr.count("Pedido recibido"), 3)
+        self.assertEqual(system_stderr.count("Pedido producido"), 3)
+        self.assertEqual(system_stderr.count("Pedido consumido"), 3)
         self.assertEqual(system_stderr.count("Procesamiento iniciado"), 3)
         self.assertEqual(system_stderr.count("Procesamiento finalizado"), 3)
         self.assertEqual(system_stderr.count("Etapa finalizada"), 12)
@@ -197,24 +199,33 @@ class MainProcessIntegrationTests(unittest.TestCase):
         )
         self.assertGreaterEqual(starts_before_first_finish, 2)
 
-        worker_one_events = [
-            event for event in processing_events if "worker=1" in event
-        ]
-        worker_one_first_finish = next(
-            index
-            for index, event in enumerate(worker_one_events)
-            if "Procesamiento finalizado" in event
-        )
-        worker_one_starts = [
-            event
-            for event in worker_one_events[:worker_one_first_finish]
-            if "Procesamiento iniciado" in event
-        ]
-        self.assertEqual(len(worker_one_starts), 2)
-        worker_one_thread_names = {
-            event.split("hilo=", 1)[1].split()[0] for event in worker_one_starts
-        }
-        self.assertEqual(len(worker_one_thread_names), 2)
+        concurrent_consumer_found = False
+        for worker_id in (1, 2):
+            worker_events = [
+                event
+                for event in processing_events
+                if f"worker={worker_id}" in event
+            ]
+            first_finish = next(
+                (
+                    index
+                    for index, event in enumerate(worker_events)
+                    if "Procesamiento finalizado" in event
+                ),
+                None,
+            )
+            if first_finish is None:
+                continue
+            starts = [
+                event
+                for event in worker_events[:first_finish]
+                if "Procesamiento iniciado" in event
+            ]
+            thread_names = {
+                event.split("hilo=", 1)[1].split()[0] for event in starts
+            }
+            concurrent_consumer_found |= len(thread_names) >= 2
+        self.assertTrue(concurrent_consumer_found)
 
     def test_shared_inventory_exposes_a_reproducible_race(self) -> None:
         stopped, system_stderr = self._run_inventory_scenario("race")

@@ -20,6 +20,10 @@ class WorkerPoolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "race_window"):
             WorkerPool(1, race_window=-1)
 
+    def test_requires_a_positive_queue_capacity(self) -> None:
+        with self.assertRaisesRegex(ValueError, "queue_capacity"):
+            WorkerPool(1, queue_capacity=0)
+
 
 if __name__ == "__main__":
     unittest.main()
