@@ -56,7 +56,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json:
         print(json.dumps(response, sort_keys=True))
     elif response["status"] == "accepted":
-        print(f"Order {response['order_id']} accepted by the system")
+        print(
+            f"Order {response['order_id']} accepted by the system "
+            f"and assigned to worker {response['worker_id']}"
+        )
     else:
         print(f"Order rejected: {response['message']}")
     return 0 if response["status"] == "accepted" else 1

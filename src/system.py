@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from src.orders import Order
+from src.processing import ProcessingResult
 
 
 class ManagerState(StrEnum):
@@ -33,6 +34,7 @@ class SystemManager:
         self._owner_pid = os.getpid()
         self._state = ManagerState.CREATED
         self._orders: dict[str, Order] = {}
+        self._results: dict[str, ProcessingResult] = {}
 
     @property
     def state(self) -> ManagerState:
@@ -47,6 +49,10 @@ class SystemManager:
         """Return an immutable view of orders in registration order."""
         return tuple(self._orders.values())
 
+    @property
+    def results(self) -> tuple[ProcessingResult, ...]:
+        return tuple(self._results.values())
+
     def start(self) -> ProcessIdentity:
         """Start the administrator in its owning process."""
         if os.getpid() != self._owner_pid:
@@ -60,10 +66,24 @@ class SystemManager:
     def register_order(self, order: Order) -> None:
         """Register a new order for processing in a later phase."""
         if self._state is not ManagerState.RUNNING:
-            raise RuntimeError("orders can only be registered while the manager is running")
+            raise RuntimeError(
+                "orders can only be registered while the manager is running"
+            )
         if order.order_id in self._orders:
             raise ValueError(f"duplicate order_id: {order.order_id}")
         self._orders[order.order_id] = order
+
+    def record_result(self, result: ProcessingResult) -> None:
+        """Consolidate a result returned by a worker process."""
+        if self._state is not ManagerState.RUNNING:
+            raise RuntimeError(
+                "results can only be recorded while the manager is running"
+            )
+        order = self._orders.get(result.order_id)
+        if order is None:
+            raise ValueError(f"unknown order_id: {result.order_id}")
+        self._orders[result.order_id] = replace(order, status=result.status)
+        self._results[result.order_id] = result
 
     def summary(self) -> dict[str, int]:
         """Summarize the orders currently administered by status."""

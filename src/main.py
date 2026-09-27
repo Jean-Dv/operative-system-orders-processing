@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 from src.server import OrderServer, ServerAddress
 from src.system import SystemManager
+from src.workers import WorkerPool
 
 
 def configure_logging() -> None:
@@ -36,10 +37,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument(
+        "--workers",
+        type=positive_int,
+        default=2,
+        help="number of worker processes (default: 2)",
+    )
+    parser.add_argument(
         "--processing-delay",
         type=non_negative_float,
         default=2.0,
-        help="seconds spent processing each order sequentially (default: 2)",
+        help="seconds spent by a worker on each order (default: 2)",
     )
     parser.add_argument(
         "--max-orders",
@@ -69,11 +76,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging()
     manager = SystemManager()
     identity = manager.start()
+    worker_pool = WorkerPool(args.workers, args.processing_delay)
+    worker_pool.start()
     server = OrderServer(
         manager,
+        worker_pool.submit,
         args.host,
         args.port,
-        processing_delay=args.processing_delay,
     )
 
     def announce_ready(address: ServerAddress) -> None:
@@ -85,6 +94,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "state": manager.state.value,
             "host": address.host,
             "port": address.port,
+            "workers": [
+                {"worker_id": worker.worker_id, "pid": worker.pid}
+                for worker in worker_pool.identities
+            ],
         }
         if args.json:
             print(json.dumps(details, sort_keys=True), flush=True)
@@ -106,6 +119,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        for result in worker_pool.stop():
+            manager.record_result(result)
         summary = manager.summary()
         manager.stop()
 

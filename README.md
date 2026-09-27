@@ -3,19 +3,26 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 1
+## Estado actual: fase 2
 
-La aplicación separa el sistema de los clientes. El proceso principal permanece
-activo, recibe pedidos por TCP, los valida y los registra como pendientes. Cada
-cliente es otro proceso que envía un pedido al sistema. El registro sigue siendo
-local al proceso principal: todavía no existen trabajadores, memoria compartida
-ni procesamiento concurrente interno.
+La aplicación separa el sistema de los clientes. El proceso principal recibe
+pedidos por TCP, los valida, los registra y los asigna en round-robin a procesos
+trabajadores persistentes. Cada trabajador procesa un pedido a la vez. El
+registro sigue siendo local al proceso principal; todavía no existen hilos ni
+memoria de dominio compartida.
+
+Cada trabajador ejecuta el pipeline completo:
+
+1. valida que el producto exista;
+2. comprueba y descuenta inventario;
+3. genera una factura con el total del pedido;
+4. genera una guía y deja el pedido listo para despacho.
 
 Requisitos: Linux y Python 3.11 o posterior. No se necesitan dependencias
 externas.
 
 ```bash
-python -m src.main
+python -m src.main --workers 2 --processing-delay 2
 ```
 
 En otras terminales se pueden ejecutar uno o varios clientes:
@@ -36,20 +43,42 @@ Por cada solicitud, la terminal del sistema muestra su avance real:
 ```text
 Cliente conectado | ip=127.0.0.1 puerto=54321
 Pedido recibido | id=ORD-... cliente=CUSTOMER-001 producto=PRODUCT-001 cantidad=2
-Procesamiento iniciado | id=ORD-... demora_simulada=2.00s
 Validacion completada | id=ORD-... resultado=correcto
-Procesamiento finalizado | id=ORD-... estado=pending total_pendientes=1
+Pedido asignado | id=ORD-... worker=1 worker_pid=1235 total_pendientes=1
+Procesamiento iniciado | worker=1 pedido=ORD-... demora_simulada=2.00s
+Etapa finalizada | worker=1 etapa=validation result=valid
+Etapa finalizada | worker=1 etapa=inventory_update previous_stock=100 current_stock=98
+Etapa finalizada | worker=1 etapa=invoice_generation invoice_id=INV-ORD-... total_cents=39800
+Etapa finalizada | worker=1 etapa=dispatch_preparation dispatch_id=DSP-ORD-... status=ready_for_dispatch
+Procesamiento finalizado | worker=1 pedido=ORD-... estado=ready_for_dispatch
 ```
 
 En esta fase, “procesar” significa validar y registrar. Inventario, facturación
 y preparación para despacho se incorporarán en las fases siguientes.
 
-El servidor procesa una conexión completa antes de aceptar la siguiente. Al
-lanzar dos clientes al mismo tiempo, el segundo espera a que finalice la demora
-del primero. La demora predeterminada es de dos segundos y puede cambiarse:
+Con dos trabajadores, dos pedidos pueden estar en procesamiento al mismo tiempo;
+un tercer pedido espera en el canal del trabajador que le corresponda. Los PID
+distintos demuestran que no son hilos del proceso principal. La demora puede
+cambiarse para observar mejor el comportamiento:
 
 ```bash
 python -m src.main --processing-delay 5
+```
+
+La demora indicada se reparte entre las cuatro etapas. Por ahora cada trabajador
+mantiene su propia copia de inventario. Unificar ese estado entre procesos es el
+objetivo de la fase 4; esta limitación evita presentar memoria local como si ya
+fuera un recurso compartido correcto.
+
+Al detener el sistema, los trabajadores devuelven los resultados por sus canales
+`Pipe`. El proceso principal consolida entonces los estados finales
+`ready_for_dispatch` o `rejected` antes de imprimir el resumen.
+
+En Linux, la jerarquía puede observarse mientras el sistema está activo:
+
+```bash
+pstree -p <PID_DEL_SISTEMA>
+ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 ```
 
 ## Pruebas
@@ -58,5 +87,5 @@ python -m src.main --processing-delay 5
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas validan el dominio, el ciclo de vida y tres procesos cliente que
-envían pedidos al proceso principal.
+Las pruebas validan el dominio, el ciclo de vida, los parámetros del pool y que
+dos trabajadores procesen en paralelo pedidos enviados por tres clientes.

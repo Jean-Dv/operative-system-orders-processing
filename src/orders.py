@@ -14,6 +14,7 @@ class OrderStatus(StrEnum):
     INVENTORY_UPDATED = "inventory_updated"
     INVOICED = "invoiced"
     READY_FOR_DISPATCH = "ready_for_dispatch"
+    REJECTED = "rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,4 +36,3 @@ class Order:
             raise ValueError("product_id cannot be empty")
         if self.quantity <= 0:
             raise ValueError("quantity must be greater than zero")
-

@@ -6,6 +6,7 @@ import time
 import unittest
 
 from src.orders import Order, OrderStatus
+from src.processing import ProcessingResult
 from src.system import ManagerState, SystemManager
 
 
@@ -67,6 +68,21 @@ class SystemManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "only be registered"):
             manager.register_order(order)
 
+    def test_manager_consolidates_a_worker_result(self) -> None:
+        manager = SystemManager()
+        manager.start()
+        manager.register_order(
+            Order("ORD-0001", "CUSTOMER-0001", "PRODUCT-001", 1)
+        )
+
+        manager.record_result(
+            ProcessingResult("ORD-0001", OrderStatus.READY_FOR_DISPATCH)
+        )
+
+        self.assertEqual(manager.summary(), {"total": 1, "ready_for_dispatch": 1})
+        self.assertEqual(len(manager.results), 1)
+        manager.stop()
+
 
 class MainProcessIntegrationTests(unittest.TestCase):
     def test_system_accepts_orders_from_multiple_client_processes(self) -> None:
@@ -79,8 +95,10 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 "0",
                 "--max-orders",
                 "3",
+                "--workers",
+                "2",
                 "--processing-delay",
-                "0.15",
+                "0.30",
                 "--json",
             ],
             stdout=subprocess.PIPE,
@@ -134,24 +152,45 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertEqual(ready["pid"], system_process.pid)
         self.assertEqual(ready["ppid"], os.getpid())
         self.assertTrue(all(item["status"] == "accepted" for item in responses))
-        self.assertEqual(stopped["orders"], {"total": 3, "pending": 3})
+        self.assertEqual({item["worker_id"] for item in responses}, {1, 2})
+        self.assertEqual(
+            stopped["orders"],
+            {"total": 3, "ready_for_dispatch": 3},
+        )
         self.assertEqual(system_stderr.count("Pedido recibido"), 3)
         self.assertEqual(system_stderr.count("Procesamiento iniciado"), 3)
         self.assertEqual(system_stderr.count("Procesamiento finalizado"), 3)
-        self.assertGreaterEqual(processing_elapsed, 0.4)
+        self.assertEqual(system_stderr.count("Etapa finalizada"), 12)
+        self.assertEqual(system_stderr.count("etapa=validation"), 6)
+        self.assertEqual(system_stderr.count("etapa=inventory_update"), 6)
+        self.assertEqual(system_stderr.count("etapa=invoice_generation"), 6)
+        self.assertEqual(system_stderr.count("etapa=dispatch_preparation"), 6)
+        self.assertEqual(system_stderr.count("Trabajador iniciado"), 2)
+        self.assertEqual(len(ready["workers"]), 2)
+        self.assertEqual(
+            len({worker["pid"] for worker in ready["workers"]}),
+            2,
+        )
+        self.assertTrue(
+            all(worker["pid"] != ready["pid"] for worker in ready["workers"])
+        )
+        self.assertGreaterEqual(processing_elapsed, 0.5)
 
         processing_events = [
             line
             for line in system_stderr.splitlines()
             if "Procesamiento iniciado" in line or "Procesamiento finalizado" in line
         ]
-        for index in range(0, len(processing_events), 2):
-            started, finished = processing_events[index : index + 2]
-            self.assertIn("Procesamiento iniciado", started)
-            self.assertIn("Procesamiento finalizado", finished)
-            started_order_id = started.split("id=", 1)[1].split()[0]
-            finished_order_id = finished.split("id=", 1)[1].split()[0]
-            self.assertEqual(started_order_id, finished_order_id)
+        first_finished = next(
+            index
+            for index, event in enumerate(processing_events)
+            if "Procesamiento finalizado" in event
+        )
+        starts_before_first_finish = sum(
+            "Procesamiento iniciado" in event
+            for event in processing_events[:first_finished]
+        )
+        self.assertEqual(starts_before_first_finish, 2)
 
     @staticmethod
     def _stop_process(process: subprocess.Popen[str]) -> None:
