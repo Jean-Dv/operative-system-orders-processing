@@ -3,7 +3,7 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 7
+## Estado actual: fase 8
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
 pedidos por TCP, los valida y actúa como productor al insertarlos en una
@@ -86,6 +86,33 @@ python -m src.main --processing-delay 5
 El cliente confirma que el pedido fue encolado; el consumidor concreto se conoce
 cuando aparece `Pedido consumido` en las trazas del sistema.
 
+## Demostración de interbloqueo
+
+El escenario `deadlock` modela dos pedidos y dos recursos adquiridos en orden
+inverso:
+
+```text
+ORDER-A conserva inventory_lock y espera invoice_lock
+ORDER-B conserva invoice_lock y espera inventory_lock
+```
+
+Ejecútelo sin iniciar clientes ni el servidor TCP:
+
+```bash
+python -m src.main \
+  --scenario deadlock \
+  --deadlock-timeout 0.25 \
+  --json
+```
+
+Los hilos se bloquean realmente al adquirir el segundo recurso. La simulación se
+ejecuta en un proceso hijo aislado; el timeout solo permite al proceso padre
+diagnosticar y finalizar la demostración. No es todavía una estrategia de
+prevención.
+
+El diagnóstico informa exclusión mutua, retención y espera, ausencia de
+expropiación y espera circular: las cuatro condiciones de Coffman.
+
 La demora indicada se reparte entre las cuatro etapas. Todos los trabajadores
 acceden al mismo inventario. El modo predeterminado `normal` utiliza exclusión
 mutua sin ampliar artificialmente la ventana de carrera.
@@ -147,6 +174,5 @@ ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas verifican los eventos producidos/consumidos, el cierre de la cola,
-el procesamiento concurrente y la comparación entre los escenarios `race` y
-`safe`.
+Las pruebas verifican la cola, el procesamiento concurrente, los escenarios
+`race`/`safe` y la detección aislada de los dos hilos interbloqueados.
