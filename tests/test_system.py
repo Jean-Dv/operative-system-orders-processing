@@ -85,7 +85,7 @@ class SystemManagerTests(unittest.TestCase):
 
 
 class MainProcessIntegrationTests(unittest.TestCase):
-    def test_system_accepts_orders_from_multiple_client_processes(self) -> None:
+    def test_workers_use_threads_to_process_orders_concurrently(self) -> None:
         system_process = subprocess.Popen(
             [
                 sys.executable,
@@ -94,11 +94,13 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 "--port",
                 "0",
                 "--max-orders",
-                "3",
+                "5",
                 "--workers",
                 "2",
+                "--threads-per-worker",
+                "2",
                 "--processing-delay",
-                "0.30",
+                "0.40",
                 "--json",
             ],
             stdout=subprocess.PIPE,
@@ -123,7 +125,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
                     "--customer-id",
                     f"CUSTOMER-{sequence:04d}",
                     "--product-id",
-                    "PRODUCT-001",
+                    f"PRODUCT-{((sequence - 1) % 3) + 1:03d}",
                     "--quantity",
                     "1",
                     "--json",
@@ -132,7 +134,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            for sequence in range(1, 4)
+            for sequence in range(1, 6)
         ]
         for client in clients:
             self.addCleanup(self._stop_process, client)
@@ -155,16 +157,16 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertEqual({item["worker_id"] for item in responses}, {1, 2})
         self.assertEqual(
             stopped["orders"],
-            {"total": 3, "ready_for_dispatch": 3},
+            {"total": 5, "ready_for_dispatch": 5},
         )
-        self.assertEqual(system_stderr.count("Pedido recibido"), 3)
-        self.assertEqual(system_stderr.count("Procesamiento iniciado"), 3)
-        self.assertEqual(system_stderr.count("Procesamiento finalizado"), 3)
-        self.assertEqual(system_stderr.count("Etapa finalizada"), 12)
-        self.assertEqual(system_stderr.count("etapa=validation"), 6)
-        self.assertEqual(system_stderr.count("etapa=inventory_update"), 6)
-        self.assertEqual(system_stderr.count("etapa=invoice_generation"), 6)
-        self.assertEqual(system_stderr.count("etapa=dispatch_preparation"), 6)
+        self.assertEqual(system_stderr.count("Pedido recibido"), 5)
+        self.assertEqual(system_stderr.count("Procesamiento iniciado"), 5)
+        self.assertEqual(system_stderr.count("Procesamiento finalizado"), 5)
+        self.assertEqual(system_stderr.count("Etapa finalizada"), 20)
+        self.assertEqual(system_stderr.count("etapa=validation"), 10)
+        self.assertEqual(system_stderr.count("etapa=inventory_update"), 10)
+        self.assertEqual(system_stderr.count("etapa=invoice_generation"), 10)
+        self.assertEqual(system_stderr.count("etapa=dispatch_preparation"), 10)
         self.assertEqual(system_stderr.count("Trabajador iniciado"), 2)
         self.assertEqual(len(ready["workers"]), 2)
         self.assertEqual(
@@ -174,7 +176,10 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertTrue(
             all(worker["pid"] != ready["pid"] for worker in ready["workers"])
         )
-        self.assertGreaterEqual(processing_elapsed, 0.5)
+        self.assertTrue(
+            all(worker["threads_per_worker"] == 2 for worker in ready["workers"])
+        )
+        self.assertGreaterEqual(processing_elapsed, 0.7)
 
         processing_events = [
             line
@@ -190,7 +195,26 @@ class MainProcessIntegrationTests(unittest.TestCase):
             "Procesamiento iniciado" in event
             for event in processing_events[:first_finished]
         )
-        self.assertEqual(starts_before_first_finish, 2)
+        self.assertGreaterEqual(starts_before_first_finish, 2)
+
+        worker_one_events = [
+            event for event in processing_events if "worker=1" in event
+        ]
+        worker_one_first_finish = next(
+            index
+            for index, event in enumerate(worker_one_events)
+            if "Procesamiento finalizado" in event
+        )
+        worker_one_starts = [
+            event
+            for event in worker_one_events[:worker_one_first_finish]
+            if "Procesamiento iniciado" in event
+        ]
+        self.assertEqual(len(worker_one_starts), 2)
+        worker_one_thread_names = {
+            event.split("hilo=", 1)[1].split()[0] for event in worker_one_starts
+        }
+        self.assertEqual(len(worker_one_thread_names), 2)
 
     @staticmethod
     def _stop_process(process: subprocess.Popen[str]) -> None:

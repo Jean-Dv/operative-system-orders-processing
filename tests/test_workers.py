@@ -12,6 +12,10 @@ class WorkerPoolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot be negative"):
             WorkerPool(1, processing_delay=-1)
 
+    def test_requires_at_least_one_thread_per_worker(self) -> None:
+        with self.assertRaisesRegex(ValueError, "threads_per_worker"):
+            WorkerPool(1, threads_per_worker=0)
+
 
 if __name__ == "__main__":
     unittest.main()

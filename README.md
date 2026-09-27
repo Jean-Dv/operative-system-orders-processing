@@ -3,13 +3,13 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 2
+## Estado actual: fase 3
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
 pedidos por TCP, los valida, los registra y los asigna en round-robin a procesos
-trabajadores persistentes. Cada trabajador procesa un pedido a la vez. El
-registro sigue siendo local al proceso principal; todavía no existen hilos ni
-memoria de dominio compartida.
+trabajadores persistentes. Dentro de cada trabajador, un pool de hilos permite
+procesar varios pedidos concurrentemente. El registro sigue siendo local al
+proceso principal.
 
 Cada trabajador ejecuta el pipeline completo:
 
@@ -22,7 +22,7 @@ Requisitos: Linux y Python 3.11 o posterior. No se necesitan dependencias
 externas.
 
 ```bash
-python -m src.main --workers 2 --processing-delay 2
+python -m src.main --workers 2 --threads-per-worker 2 --processing-delay 2
 ```
 
 En otras terminales se pueden ejecutar uno o varios clientes:
@@ -45,30 +45,27 @@ Cliente conectado | ip=127.0.0.1 puerto=54321
 Pedido recibido | id=ORD-... cliente=CUSTOMER-001 producto=PRODUCT-001 cantidad=2
 Validacion completada | id=ORD-... resultado=correcto
 Pedido asignado | id=ORD-... worker=1 worker_pid=1235 total_pendientes=1
-Procesamiento iniciado | worker=1 pedido=ORD-... demora_simulada=2.00s
-Etapa finalizada | worker=1 etapa=validation result=valid
-Etapa finalizada | worker=1 etapa=inventory_update previous_stock=100 current_stock=98
-Etapa finalizada | worker=1 etapa=invoice_generation invoice_id=INV-ORD-... total_cents=39800
-Etapa finalizada | worker=1 etapa=dispatch_preparation dispatch_id=DSP-ORD-... status=ready_for_dispatch
+Procesamiento iniciado | worker=1 hilo=worker-1-thread_0 pedido=ORD-...
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=validation
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=inventory_update previous_stock=100 current_stock=98
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=invoice_generation invoice_id=INV-ORD-...
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=dispatch_preparation status=ready_for_dispatch
 Procesamiento finalizado | worker=1 pedido=ORD-... estado=ready_for_dispatch
 ```
 
-En esta fase, “procesar” significa validar y registrar. Inventario, facturación
-y preparación para despacho se incorporarán en las fases siguientes.
-
-Con dos trabajadores, dos pedidos pueden estar en procesamiento al mismo tiempo;
-un tercer pedido espera en el canal del trabajador que le corresponda. Los PID
-distintos demuestran que no son hilos del proceso principal. La demora puede
-cambiarse para observar mejor el comportamiento:
+Con dos trabajadores y dos hilos por trabajador pueden ejecutarse hasta cuatro
+pedidos al mismo tiempo. El PID identifica el proceso y `hilo`/`THREAD` identifica
+el hilo que atiende cada pedido. La demora puede cambiarse para observar mejor
+el solapamiento:
 
 ```bash
 python -m src.main --processing-delay 5
 ```
 
 La demora indicada se reparte entre las cuatro etapas. Por ahora cada trabajador
-mantiene su propia copia de inventario. Unificar ese estado entre procesos es el
-objetivo de la fase 4; esta limitación evita presentar memoria local como si ya
-fuera un recurso compartido correcto.
+mantiene su propia copia de inventario, compartida por sus hilos. Las pruebas de
+esta fase usan productos distintos para no introducir todavía una carrera sobre
+el inventario. Unificar el estado entre procesos corresponde a la fase 4.
 
 Al detener el sistema, los trabajadores devuelven los resultados por sus canales
 `Pipe`. El proceso principal consolida entonces los estados finales
@@ -88,4 +85,4 @@ python -m unittest discover -s tests -v
 ```
 
 Las pruebas validan el dominio, el ciclo de vida, los parámetros del pool y que
-dos trabajadores procesen en paralelo pedidos enviados por tres clientes.
+dos hilos del mismo proceso comiencen antes de que finalice el primero.

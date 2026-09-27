@@ -16,7 +16,10 @@ def configure_logging() -> None:
     """Configure human-readable operational events for the system process."""
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | PID=%(process)d | %(message)s",
+        format=(
+            "%(asctime)s | %(levelname)s | PID=%(process)d | "
+            "THREAD=%(threadName)s | %(message)s"
+        ),
         datefmt="%H:%M:%S",
     )
 
@@ -41,6 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=positive_int,
         default=2,
         help="number of worker processes (default: 2)",
+    )
+    parser.add_argument(
+        "--threads-per-worker",
+        type=positive_int,
+        default=2,
+        help="number of order-processing threads per worker (default: 2)",
     )
     parser.add_argument(
         "--processing-delay",
@@ -76,7 +85,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging()
     manager = SystemManager()
     identity = manager.start()
-    worker_pool = WorkerPool(args.workers, args.processing_delay)
+    worker_pool = WorkerPool(
+        args.workers,
+        args.processing_delay,
+        args.threads_per_worker,
+    )
     worker_pool.start()
     server = OrderServer(
         manager,
@@ -95,7 +108,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "host": address.host,
             "port": address.port,
             "workers": [
-                {"worker_id": worker.worker_id, "pid": worker.pid}
+                {
+                    "worker_id": worker.worker_id,
+                    "pid": worker.pid,
+                    "threads_per_worker": worker.threads_per_worker,
+                }
                 for worker in worker_pool.identities
             ],
         }
