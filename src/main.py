@@ -7,6 +7,7 @@ import json
 import logging
 from collections.abc import Sequence
 
+from src.orders import OrderStatus
 from src.server import OrderServer, ServerAddress
 from src.system import SystemManager
 from src.workers import WorkerPool
@@ -58,6 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds spent by a worker on each order (default: 2)",
     )
     parser.add_argument(
+        "--scenario",
+        choices=("normal", "race"),
+        default="normal",
+        help="use 'race' to widen the unsafe inventory update window",
+    )
+    parser.add_argument(
         "--max-orders",
         type=positive_int,
         default=None,
@@ -89,6 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.workers,
         args.processing_delay,
         args.threads_per_worker,
+        race_window=0.1 if args.scenario == "race" else 0.0,
     )
     worker_pool.start()
     server = OrderServer(
@@ -141,7 +149,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         summary = manager.summary()
         manager.stop()
 
-    stopped = {"event": "stopped", "orders": summary}
+    actual_inventory = worker_pool.inventory_snapshot
+    expected_inventory = worker_pool.initial_inventory_snapshot
+    for order in manager.orders:
+        if order.status is OrderStatus.READY_FOR_DISPATCH:
+            expected_inventory[order.product_id] -= order.quantity
+    race_detected = actual_inventory != expected_inventory
+    if race_detected:
+        logging.getLogger("order_system").warning(
+            "Condicion de carrera detectada | esperado=%s real=%s",
+            expected_inventory,
+            actual_inventory,
+        )
+
+    stopped = {
+        "event": "stopped",
+        "orders": summary,
+        "inventory": {
+            "expected": expected_inventory,
+            "actual": actual_inventory,
+            "race_detected": race_detected,
+        },
+    }
     logging.getLogger("order_system").info(
         "Sistema detenido | pedidos_registrados=%s",
         summary["total"],

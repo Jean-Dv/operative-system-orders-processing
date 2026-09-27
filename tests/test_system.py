@@ -94,7 +94,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 "--port",
                 "0",
                 "--max-orders",
-                "5",
+                "3",
                 "--workers",
                 "2",
                 "--threads-per-worker",
@@ -134,7 +134,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            for sequence in range(1, 6)
+            for sequence in range(1, 4)
         ]
         for client in clients:
             self.addCleanup(self._stop_process, client)
@@ -157,16 +157,16 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertEqual({item["worker_id"] for item in responses}, {1, 2})
         self.assertEqual(
             stopped["orders"],
-            {"total": 5, "ready_for_dispatch": 5},
+            {"total": 3, "ready_for_dispatch": 3},
         )
-        self.assertEqual(system_stderr.count("Pedido recibido"), 5)
-        self.assertEqual(system_stderr.count("Procesamiento iniciado"), 5)
-        self.assertEqual(system_stderr.count("Procesamiento finalizado"), 5)
-        self.assertEqual(system_stderr.count("Etapa finalizada"), 20)
-        self.assertEqual(system_stderr.count("etapa=validation"), 10)
-        self.assertEqual(system_stderr.count("etapa=inventory_update"), 10)
-        self.assertEqual(system_stderr.count("etapa=invoice_generation"), 10)
-        self.assertEqual(system_stderr.count("etapa=dispatch_preparation"), 10)
+        self.assertEqual(system_stderr.count("Pedido recibido"), 3)
+        self.assertEqual(system_stderr.count("Procesamiento iniciado"), 3)
+        self.assertEqual(system_stderr.count("Procesamiento finalizado"), 3)
+        self.assertEqual(system_stderr.count("Etapa finalizada"), 12)
+        self.assertEqual(system_stderr.count("etapa=validation"), 6)
+        self.assertEqual(system_stderr.count("etapa=inventory_update"), 6)
+        self.assertEqual(system_stderr.count("etapa=invoice_generation"), 6)
+        self.assertEqual(system_stderr.count("etapa=dispatch_preparation"), 6)
         self.assertEqual(system_stderr.count("Trabajador iniciado"), 2)
         self.assertEqual(len(ready["workers"]), 2)
         self.assertEqual(
@@ -179,7 +179,7 @@ class MainProcessIntegrationTests(unittest.TestCase):
         self.assertTrue(
             all(worker["threads_per_worker"] == 2 for worker in ready["workers"])
         )
-        self.assertGreaterEqual(processing_elapsed, 0.7)
+        self.assertGreaterEqual(processing_elapsed, 0.3)
 
         processing_events = [
             line
@@ -215,6 +215,73 @@ class MainProcessIntegrationTests(unittest.TestCase):
             event.split("hilo=", 1)[1].split()[0] for event in worker_one_starts
         }
         self.assertEqual(len(worker_one_thread_names), 2)
+
+    def test_shared_inventory_exposes_a_reproducible_race(self) -> None:
+        system_process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "src.main",
+                "--port",
+                "0",
+                "--max-orders",
+                "2",
+                "--workers",
+                "1",
+                "--threads-per-worker",
+                "2",
+                "--processing-delay",
+                "0.20",
+                "--scenario",
+                "race",
+                "--json",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.addCleanup(self._stop_process, system_process)
+        self.assertIsNotNone(system_process.stdout)
+        ready = json.loads(system_process.stdout.readline())
+
+        clients = [
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "src.client",
+                    "--port",
+                    str(ready["port"]),
+                    "--order-id",
+                    f"ORD-RACE-{sequence}",
+                    "--customer-id",
+                    f"CUSTOMER-{sequence}",
+                    "--product-id",
+                    "PRODUCT-001",
+                    "--quantity",
+                    "1",
+                    "--json",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for sequence in range(1, 3)
+        ]
+        for client in clients:
+            self.addCleanup(self._stop_process, client)
+            stdout, stderr = client.communicate(timeout=15)
+            self.assertEqual(client.returncode, 0, stderr)
+            self.assertEqual(json.loads(stdout)["status"], "accepted")
+
+        remaining_stdout, system_stderr = system_process.communicate(timeout=15)
+        stopped = json.loads(remaining_stdout)
+
+        self.assertEqual(system_process.returncode, 0, system_stderr)
+        self.assertEqual(stopped["inventory"]["expected"]["PRODUCT-001"], 98)
+        self.assertEqual(stopped["inventory"]["actual"]["PRODUCT-001"], 99)
+        self.assertTrue(stopped["inventory"]["race_detected"])
+        self.assertIn("Condicion de carrera detectada", system_stderr)
 
     @staticmethod
     def _stop_process(process: subprocess.Popen[str]) -> None:

@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from src.orders import Order, OrderStatus
 
@@ -104,12 +105,74 @@ class Inventory:
         return InventoryUpdate(order.product_id, previous_stock, current_stock)
 
 
+class SharedStock(Protocol):
+    def __getitem__(self, index: int) -> int: ...
+
+    def __setitem__(self, index: int, value: int) -> None: ...
+
+
+class SharedInventory:
+    """Inventory stored in memory shared by every worker process."""
+
+    def __init__(
+        self,
+        stock: SharedStock,
+        products: tuple[Product, ...] = DEFAULT_PRODUCTS,
+        race_window: float = 0.0,
+    ) -> None:
+        if race_window < 0:
+            raise ValueError("race_window cannot be negative")
+        self._stock = stock
+        self._products = {product.product_id: product for product in products}
+        self._indexes = {
+            product.product_id: index for index, product in enumerate(products)
+        }
+        self._race_window = race_window
+
+    def product(self, product_id: str) -> Product | None:
+        return self._products.get(product_id)
+
+    def stock_for(self, product_id: str) -> int:
+        try:
+            index = self._indexes[product_id]
+        except KeyError as error:
+            raise KeyError(product_id) from error
+        return self._stock[index]
+
+    def snapshot(self) -> dict[str, int]:
+        return {
+            product_id: self._stock[index]
+            for product_id, index in self._indexes.items()
+        }
+
+    def initial_snapshot(self) -> dict[str, int]:
+        return {
+            product.product_id: product.initial_stock
+            for product in self._products.values()
+        }
+
+    def deduct(self, order: Order) -> InventoryUpdate:
+        index = self._indexes[order.product_id]
+        previous_stock = self._stock[index]
+        if previous_stock < order.quantity:
+            raise ProcessingError(
+                ProcessingStage.INVENTORY,
+                f"insufficient stock for {order.product_id}",
+            )
+
+        # Intentionally unsafe read-modify-write for the race demonstration.
+        time.sleep(self._race_window)
+        current_stock = previous_stock - order.quantity
+        self._stock[index] = current_stock
+        return InventoryUpdate(order.product_id, previous_stock, current_stock)
+
+
 class OrderProcessor:
     """Execute the e-commerce stages for one order."""
 
     def __init__(
         self,
-        inventory: Inventory,
+        inventory: Inventory | SharedInventory,
         total_processing_delay: float = 2.0,
     ) -> None:
         if total_processing_delay < 0:

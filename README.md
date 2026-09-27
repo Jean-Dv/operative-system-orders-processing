@@ -3,13 +3,18 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 3
+## Estado actual: fases 4 y 5
 
 La aplicación separa el sistema de los clientes. El proceso principal recibe
 pedidos por TCP, los valida, los registra y los asigna en round-robin a procesos
 trabajadores persistentes. Dentro de cada trabajador, un pool de hilos permite
 procesar varios pedidos concurrentemente. El registro sigue siendo local al
 proceso principal.
+
+El inventario utiliza un `multiprocessing.RawArray` único: el proceso principal,
+los trabajadores y sus hilos observan los mismos valores. La actualización es
+intencionalmente insegura para demostrar una condición de carrera antes de
+corregirla con exclusión mutua.
 
 Cada trabajador ejecuta el pipeline completo:
 
@@ -62,10 +67,32 @@ el solapamiento:
 python -m src.main --processing-delay 5
 ```
 
-La demora indicada se reparte entre las cuatro etapas. Por ahora cada trabajador
-mantiene su propia copia de inventario, compartida por sus hilos. Las pruebas de
-esta fase usan productos distintos para no introducir todavía una carrera sobre
-el inventario. Unificar el estado entre procesos corresponde a la fase 4.
+La demora indicada se reparte entre las cuatro etapas. Todos los trabajadores
+acceden al mismo inventario. El modo normal no amplía artificialmente la ventana
+de carrera, pero todavía carece de bloqueo.
+
+## Demostración de la condición de carrera
+
+Ejecute un proceso con dos hilos y amplíe la operación insegura mediante el
+escenario `race`:
+
+```bash
+python -m src.main \
+  --workers 1 \
+  --threads-per-worker 2 \
+  --scenario race \
+  --processing-delay 2
+```
+
+Envíe simultáneamente dos pedidos de una unidad para `PRODUCT-001`. Ambos hilos
+pueden leer stock `100` y escribir `99`. El resultado correcto sería `98`, por
+lo que al cerrar el sistema se obtiene una evidencia como:
+
+```text
+Condicion de carrera detectada | esperado={'PRODUCT-001': 98, ...} real={'PRODUCT-001': 99, ...}
+```
+
+No se utiliza `Lock` todavía; la exclusión mutua corresponde a la fase siguiente.
 
 Al detener el sistema, los trabajadores devuelven los resultados por sus canales
 `Pipe`. El proceso principal consolida entonces los estados finales
@@ -84,5 +111,5 @@ ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas validan el dominio, el ciclo de vida, los parámetros del pool y que
-dos hilos del mismo proceso comiencen antes de que finalice el primero.
+Las pruebas validan el dominio, los procesos e hilos, la visibilidad del
+inventario compartido y la pérdida reproducible de una actualización.

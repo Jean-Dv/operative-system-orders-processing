@@ -12,7 +12,13 @@ from dataclasses import dataclass
 from multiprocessing.connection import Connection
 
 from src.orders import Order, OrderStatus
-from src.processing import Inventory, OrderProcessor, ProcessingResult, StageEvent
+from src.processing import (
+    DEFAULT_PRODUCTS,
+    OrderProcessor,
+    ProcessingResult,
+    SharedInventory,
+    StageEvent,
+)
 
 
 LOGGER = logging.getLogger("order_system.workers")
@@ -34,6 +40,7 @@ def _worker_main(
     connection: Connection,
     processing_delay: float,
     threads_per_worker: int,
+    inventory: SharedInventory,
 ) -> None:
     """Receive and process orders inside a child process."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -50,7 +57,7 @@ def _worker_main(
         worker_id,
         os.getppid(),
     )
-    processor = OrderProcessor(Inventory(), processing_delay)
+    processor = OrderProcessor(inventory, processing_delay)
     futures: list[Future[ProcessingResult]] = []
 
     with ThreadPoolExecutor(
@@ -161,6 +168,7 @@ class WorkerPool:
         worker_count: int,
         processing_delay: float = 2.0,
         threads_per_worker: int = 2,
+        race_window: float = 0.0,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be greater than zero")
@@ -168,17 +176,36 @@ class WorkerPool:
             raise ValueError("processing_delay cannot be negative")
         if threads_per_worker <= 0:
             raise ValueError("threads_per_worker must be greater than zero")
+        if race_window < 0:
+            raise ValueError("race_window cannot be negative")
 
         self._worker_count = worker_count
         self._processing_delay = processing_delay
         self._threads_per_worker = threads_per_worker
         self._context = mp.get_context("spawn")
+        shared_stock = self._context.Array(
+            "i",
+            [product.initial_stock for product in DEFAULT_PRODUCTS],
+            lock=False,
+        )
+        self._inventory = SharedInventory(
+            shared_stock,
+            race_window=race_window,
+        )
         self._workers: list[_WorkerHandle] = []
         self._next_worker = 0
 
     @property
     def identities(self) -> tuple[WorkerIdentity, ...]:
         return tuple(worker.identity for worker in self._workers)
+
+    @property
+    def inventory_snapshot(self) -> dict[str, int]:
+        return self._inventory.snapshot()
+
+    @property
+    def initial_inventory_snapshot(self) -> dict[str, int]:
+        return self._inventory.initial_snapshot()
 
     def start(self) -> None:
         if self._workers:
@@ -193,6 +220,7 @@ class WorkerPool:
                     child_connection,
                     self._processing_delay,
                     self._threads_per_worker,
+                    self._inventory,
                 ),
                 name=f"order-worker-{worker_id}",
             )

@@ -16,6 +16,10 @@ class WorkerPoolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "threads_per_worker"):
             WorkerPool(1, threads_per_worker=0)
 
+    def test_rejects_negative_race_window(self) -> None:
+        with self.assertRaisesRegex(ValueError, "race_window"):
+            WorkerPool(1, race_window=-1)
+
 
 if __name__ == "__main__":
     unittest.main()
