@@ -3,19 +3,35 @@
 Simulador académico para estudiar procesos, hilos, concurrencia y
 sincronización en Linux. El desarrollo se realiza de forma incremental.
 
-## Estado actual: fase 1
+## Estado actual: fases 10 y 11
 
-La aplicación separa el sistema de los clientes. El proceso principal permanece
-activo, recibe pedidos por TCP, los valida y los registra como pendientes. Cada
-cliente es otro proceso que envía un pedido al sistema. El registro sigue siendo
-local al proceso principal: todavía no existen trabajadores, memoria compartida
-ni procesamiento concurrente interno.
+La aplicación separa el sistema de los clientes. El proceso principal recibe
+pedidos por TCP, los valida y actúa como productor al insertarlos en una
+`multiprocessing.JoinableQueue`. Los procesos trabajadores compiten como
+consumidores y entregan cada pedido a su pool de hilos. El registro permanece en
+el proceso principal.
+
+El inventario utiliza un `multiprocessing.RawArray` único: el proceso principal,
+los trabajadores y sus hilos observan los mismos valores. Un
+`multiprocessing.Lock` protege toda actualización de inventario en los modos
+`normal` y `safe`. El modo `race` conserva la versión insegura como evidencia.
+
+Cada trabajador ejecuta el pipeline completo:
+
+1. valida que el producto exista;
+2. comprueba y descuenta inventario;
+3. genera una factura con el total del pedido;
+4. genera una guía y deja el pedido listo para despacho.
 
 Requisitos: Linux y Python 3.11 o posterior. No se necesitan dependencias
 externas.
 
 ```bash
-python -m src.main
+python -m src.main \
+  --workers 2 \
+  --threads-per-worker 2 \
+  --queue-capacity 100 \
+  --processing-delay 2
 ```
 
 En otras terminales se pueden ejecutar uno o varios clientes:
@@ -36,20 +52,144 @@ Por cada solicitud, la terminal del sistema muestra su avance real:
 ```text
 Cliente conectado | ip=127.0.0.1 puerto=54321
 Pedido recibido | id=ORD-... cliente=CUSTOMER-001 producto=PRODUCT-001 cantidad=2
-Procesamiento iniciado | id=ORD-... demora_simulada=2.00s
 Validacion completada | id=ORD-... resultado=correcto
-Procesamiento finalizado | id=ORD-... estado=pending total_pendientes=1
+Pedido producido | productor=servidor cola=pedidos id=ORD-...
+Pedido consumido | worker=1 pedido=ORD-...
+Procesamiento iniciado | worker=1 hilo=worker-1-thread_0 pedido=ORD-...
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=validation
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=inventory_update previous_stock=100 current_stock=98
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=invoice_generation invoice_id=INV-ORD-...
+Etapa finalizada | worker=1 hilo=worker-1-thread_0 pedido=ORD-... etapa=dispatch_preparation status=ready_for_dispatch
+Procesamiento finalizado | worker=1 pedido=ORD-... estado=ready_for_dispatch
 ```
 
-En esta fase, “procesar” significa validar y registrar. Inventario, facturación
-y preparación para despacho se incorporarán en las fases siguientes.
-
-El servidor procesa una conexión completa antes de aceptar la siguiente. Al
-lanzar dos clientes al mismo tiempo, el segundo espera a que finalice la demora
-del primero. La demora predeterminada es de dos segundos y puede cambiarse:
+Con dos trabajadores y dos hilos por trabajador pueden ejecutarse hasta cuatro
+pedidos al mismo tiempo. El PID identifica el proceso y `hilo`/`THREAD` identifica
+el hilo que atiende cada pedido. La demora puede cambiarse para observar mejor
+el solapamiento:
 
 ```bash
 python -m src.main --processing-delay 5
+```
+
+## Cola productor-consumidor
+
+- **Productor:** el proceso principal ejecuta `queue.put(order)` después de
+  validar y registrar la solicitud.
+- **Búfer:** una `JoinableQueue` con capacidad configurable mediante
+  `--queue-capacity` aplica espera al productor cuando está llena.
+- **Consumidores:** los procesos trabajadores ejecutan `queue.get()` y delegan
+  el pedido a un hilo disponible.
+- **Finalización:** el hilo llama `task_done()` al terminar. El administrador usa
+  `queue.join()` y envía un centinela por consumidor durante el cierre.
+
+El cliente confirma que el pedido fue encolado; el consumidor concreto se conoce
+cuando aparece `Pedido consumido` en las trazas del sistema.
+
+## Demostración de interbloqueo
+
+El escenario `deadlock` modela dos pedidos y dos recursos adquiridos en orden
+inverso:
+
+```text
+ORDER-A conserva inventory_lock y espera invoice_lock
+ORDER-B conserva invoice_lock y espera inventory_lock
+```
+
+Ejecútelo sin iniciar clientes ni el servidor TCP:
+
+```bash
+python -m src.main \
+  --scenario deadlock \
+  --deadlock-timeout 0.25 \
+  --json
+```
+
+Los hilos se bloquean realmente al adquirir el segundo recurso. La simulación se
+ejecuta en un proceso hijo aislado; el timeout solo permite al proceso padre
+diagnosticar y finalizar la demostración.
+
+El diagnóstico informa exclusión mutua, retención y espera, ausencia de
+expropiación y espera circular: las cuatro condiciones de Coffman.
+
+## Prevención del interbloqueo
+
+La estrategia elegida es un **orden global de adquisición**. Todos los hilos
+solicitan los recursos en esta secuencia:
+
+```text
+inventory_lock → invoice_lock
+```
+
+Como ningún hilo puede adquirir `invoice_lock` primero y después esperar
+`inventory_lock`, se elimina la espera circular. Los locks continúan garantizando
+exclusión mutua y no se depende de timeouts para completar los pedidos.
+
+Ejecute la comparación corregida:
+
+```bash
+python -m src.main \
+  --scenario deadlock-safe \
+  --deadlock-timeout 0.25 \
+  --json
+```
+
+El resultado debe indicar los dos pedidos completados, `prevented=true`,
+`deadlock_detected=false` y `circular_wait=false`.
+
+La demora indicada se reparte entre las cuatro etapas. Todos los trabajadores
+acceden al mismo inventario. El modo predeterminado `normal` utiliza exclusión
+mutua sin ampliar artificialmente la ventana de carrera.
+
+## Demostración de la condición de carrera
+
+Ejecute un proceso con dos hilos y amplíe la operación insegura mediante el
+escenario `race`:
+
+```bash
+python -m src.main \
+  --workers 1 \
+  --threads-per-worker 2 \
+  --scenario race \
+  --processing-delay 2
+```
+
+Envíe simultáneamente dos pedidos de una unidad para `PRODUCT-001`. Ambos hilos
+pueden leer stock `100` y escribir `99`. El resultado correcto sería `98`, por
+lo que al cerrar el sistema se obtiene una evidencia como:
+
+```text
+Condicion de carrera detectada | esperado={'PRODUCT-001': 98, ...} real={'PRODUCT-001': 99, ...}
+```
+
+## Corrección con exclusión mutua
+
+El escenario `safe` conserva la misma ventana ampliada, pero protege la secuencia
+leer-validar-calcular-escribir con un único `Lock` compartido:
+
+```bash
+python -m src.main \
+  --workers 1 \
+  --threads-per-worker 2 \
+  --scenario safe \
+  --processing-delay 2
+```
+
+Para los mismos dos pedidos, las trazas muestran `100 → 99` y después `99 → 98`:
+
+```text
+Exclusion mutua verificada | esperado={'PRODUCT-001': 98, ...} real={'PRODUCT-001': 98, ...}
+```
+
+Al detener el sistema, los trabajadores devuelven los resultados por canales
+`Pipe` reservados para control. El proceso principal consolida entonces los
+estados finales `ready_for_dispatch` o `rejected` antes de imprimir el resumen.
+
+En Linux, la jerarquía puede observarse mientras el sistema está activo:
+
+```bash
+pstree -p <PID_DEL_SISTEMA>
+ps -o pid,ppid,stat,cmd --ppid <PID_DEL_SISTEMA>
 ```
 
 ## Pruebas
@@ -58,5 +198,32 @@ python -m src.main --processing-delay 5
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas validan el dominio, el ciclo de vida y tres procesos cliente que
-envían pedidos al proceso principal.
+Las pruebas verifican la cola, los escenarios `race`/`safe`, la detección del
+interbloqueo y su prevención mediante orden global de recursos.
+
+## Pruebas de carga y evidencia del sistema
+
+La matriz reproducible compara el procesamiento secuencial, el procesamiento
+concurrente, la condición de carrera y su corrección con mutex. Cada escenario
+recibe 100, 500 y 1.000 pedidos mediante hasta 100 clientes TCP concurrentes:
+
+```bash
+python scripts/run_experiments.py \
+  --quantities 100 500 1000 \
+  --concurrency 100
+```
+
+Durante cada ejecución se muestrean el PID y PPID del servidor y sus
+trabajadores, identificadores de hilos, uso agregado de CPU, RSS y memoria
+virtual. Los artefactos quedan en `evidence/load-tests/`:
+
+- `report.md`: tabla comparativa y comando de reproducción;
+- `results.csv`: métricas por escenario y carga;
+- `summary.json`: configuración, procesos y resultados estructurados;
+- `resource-samples.json`: serie temporal de PID, PPID, hilos, CPU y memoria;
+- `trace-excerpts.json`: fragmentos de las trazas demostrativas.
+
+La presentación de resultados, metodología y soluciones está disponible como
+[PowerPoint editable con estilo UPTC](docs/presentacion-procesamiento-pedidos-uptc.pptx),
+[PDF local](docs/presentacion-procesamiento-pedidos.pdf) y como
+[diseño editable en Canva](https://canva.link/98qijdlpmst2ims).

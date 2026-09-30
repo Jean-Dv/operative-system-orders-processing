@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import time
 import logging
 import socket
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -53,14 +51,14 @@ class OrderServer:
     def __init__(
         self,
         manager: SystemManager,
+        dispatch_order: Callable[[Order], None],
         host: str = "127.0.0.1",
         port: int = 5000,
-        processing_delay: float = 2.0,
     ) -> None:
         self._manager = manager
+        self._dispatch_order = dispatch_order
         self._host = host
         self._port = port
-        self._processing_delay = processing_delay
 
     def serve(
         self,
@@ -68,7 +66,7 @@ class OrderServer:
         max_orders: int | None = None,
         on_ready: Callable[[ServerAddress], None] | None = None,
     ) -> None:
-        """Serve sequentially until interrupted or max_orders are accepted."""
+        """Accept clients and dispatch their orders to worker processes."""
         accepted_orders = 0
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -100,16 +98,11 @@ class OrderServer:
                 order.quantity,
             )
             LOGGER.info(
-                "Procesamiento iniciado | id=%s demora_simulada=%.2fs",
-                order.order_id,
-                self._processing_delay,
-            )
-            time.sleep(self._processing_delay)
-            LOGGER.info(
                 "Validacion completada | id=%s resultado=correcto",
                 order.order_id,
             )
             self._manager.register_order(order)
+            self._dispatch_order(order)
         except (ProtocolError, ValueError) as error:
             LOGGER.warning("Pedido rechazado | motivo=%s", error)
             send_message(connection, {"status": "error", "message": str(error)})
@@ -117,13 +110,17 @@ class OrderServer:
 
         summary = self._manager.summary()
         LOGGER.info(
-            "Procesamiento finalizado | id=%s estado=%s total_pendientes=%s",
+            "Pedido producido | productor=servidor cola=pedidos "
+            "id=%s total_pendientes=%s",
             order.order_id,
-            order.status.value,
             summary.get("pending", 0),
         )
         send_message(
             connection,
-            {"status": "accepted", "order_id": order.order_id},
+            {
+                "status": "accepted",
+                "order_id": order.order_id,
+                "queue": "orders",
+            },
         )
         return True
