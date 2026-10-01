@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080">
+  <style>
+    text { font-family: 'Segoe UI', Arial, sans-serif; fill: #1F2328; }
+    .t { font-size: 34px; font-weight: 700; }
+    .st { font-size: 18px; fill: #57606A; }
+    .h { font-size: 21px; font-weight: 700; }
+    .b { font-size: 16px; }
+    .bb { font-size: 16px; font-weight: 700; }
+    .s { font-size: 14px; fill: #57606A; }
+    .m { font-family: Consolas, 'Courier New', monospace; font-size: 14px; }
+    .lbl { font-size: 15px; font-weight: 600; fill: #57606A; }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606A"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="1080" fill="#FFFFFF"/>
+
+  <text x="60" y="62" class="t">Arquitectura del sistema de procesamiento de pedidos</text>
+  <text x="60" y="94" class="st">Clientes TCP → proceso principal (productor) → cola compartida → procesos trabajadores con hilos (consumidores) → inventario en memoria compartida</text>
+
+  <!-- Pipe de control -->
+  <path d="M700,200 L700,140 L1340,140 L1340,160" fill="none" stroke="#8C959F" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arr)"/>
+  <text x="1020" y="130" class="lbl" text-anchor="middle">Pipe de control por trabajador: "ready" + PID al iniciar · resultados al cerrar</text>
+
+  <!-- Clientes -->
+  <text x="60" y="222" class="lbl">Envían pedidos JSON por TCP</text>
+  <text x="60" y="242" class="lbl">a 127.0.0.1:5000</text>
+  <g>
+    <rect x="60" y="260" width="240" height="100" rx="12" fill="#F4F5F7" stroke="#8C959F" stroke-width="2"/>
+    <text x="80" y="295" class="bb">Cliente 1</text>
+    <text x="80" y="320" class="s">proceso independiente</text>
+    <text x="80" y="343" class="m">python -m src.client</text>
+    <rect x="60" y="390" width="240" height="100" rx="12" fill="#F4F5F7" stroke="#8C959F" stroke-width="2"/>
+    <text x="80" y="425" class="bb">Cliente 2</text>
+    <text x="80" y="450" class="s">proceso independiente</text>
+    <text x="80" y="473" class="m">python -m src.client</text>
+    <rect x="60" y="520" width="240" height="100" rx="12" fill="#F4F5F7" stroke="#8C959F" stroke-width="2"/>
+    <text x="80" y="555" class="bb">Cliente N</text>
+    <text x="80" y="580" class="s">hasta 100 concurrentes</text>
+    <text x="80" y="603" class="m">en las pruebas de carga</text>
+  </g>
+  <path d="M300,310 L376,410" stroke="#57606A" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+  <path d="M300,440 L376,440" stroke="#57606A" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+  <path d="M300,570 L376,470" stroke="#57606A" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+
+  <!-- Proceso principal -->
+  <rect x="380" y="200" width="400" height="470" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="405" y="240" class="h">Proceso principal · servidor</text>
+  <text x="405" y="266" class="m">python -m src.main</text>
+  <g>
+    <rect x="405" y="285" width="350" height="58" rx="10" fill="#FFFFFF" stroke="#D9B44A"/>
+    <text x="422" y="310" class="bb">1  Acepta la conexión TCP</text>
+    <text x="446" y="332" class="s">socket.accept()</text>
+    <rect x="405" y="355" width="350" height="58" rx="10" fill="#FFFFFF" stroke="#D9B44A"/>
+    <text x="422" y="380" class="bb">2  Valida el pedido</text>
+    <text x="446" y="402" class="s">acción, campos, cantidad &gt; 0</text>
+    <rect x="405" y="425" width="350" height="58" rx="10" fill="#FFFFFF" stroke="#D9B44A"/>
+    <text x="422" y="450" class="bb">3  Registra el pedido</text>
+    <text x="446" y="472" class="s">SystemManager (rechaza order_id duplicado)</text>
+    <rect x="405" y="495" width="350" height="58" rx="10" fill="#FFFFFF" stroke="#7A4FB8" stroke-width="2"/>
+    <text x="422" y="520" class="bb">4  PRODUCE: queue.put(pedido)</text>
+    <text x="446" y="542" class="s">si la cola está llena, el productor espera</text>
+  </g>
+  <text x="405" y="592" class="s">Hilos del proceso:</text>
+  <rect x="405" y="604" width="150" height="40" rx="20" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="480" y="630" class="b" text-anchor="middle">MainThread</text>
+  <rect x="567" y="604" width="188" height="40" rx="20" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="661" y="630" class="b" text-anchor="middle">QueueFeederThread</text>
+
+  <!-- principal -> cola -->
+  <path d="M780,430 L856,430" stroke="#57606A" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <text x="818" y="418" class="lbl" text-anchor="middle">put()</text>
+
+  <!-- Cola -->
+  <rect x="860" y="320" width="200" height="220" rx="16" fill="#F1EAFB" stroke="#7A4FB8" stroke-width="3"/>
+  <text x="960" y="355" class="h" text-anchor="middle">Cola</text>
+  <text x="960" y="378" class="s" text-anchor="middle">productor-consumidor</text>
+  <text x="960" y="402" class="m" text-anchor="middle">JoinableQueue</text>
+  <g fill="#FFFFFF" stroke="#7A4FB8" stroke-width="1.5">
+    <rect x="878" y="418" width="28" height="36" rx="4"/>
+    <rect x="910" y="418" width="28" height="36" rx="4"/>
+    <rect x="942" y="418" width="28" height="36" rx="4"/>
+    <rect x="974" y="418" width="28" height="36" rx="4" fill="#F1EAFB"/>
+    <rect x="1006" y="418" width="28" height="36" rx="4" fill="#F1EAFB"/>
+  </g>
+  <text x="892" y="442" class="s" text-anchor="middle">P</text>
+  <text x="924" y="442" class="s" text-anchor="middle">P</text>
+  <text x="956" y="442" class="s" text-anchor="middle">P</text>
+  <text x="960" y="482" class="s" text-anchor="middle">capacidad:</text>
+  <text x="960" y="502" class="m" text-anchor="middle">--queue-capacity</text>
+  <text x="960" y="524" class="s" text-anchor="middle">(100 por defecto)</text>
+
+  <!-- cola -> trabajadores -->
+  <path d="M1060,400 L1136,310" stroke="#57606A" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <path d="M1060,460 L1136,630" stroke="#57606A" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <text x="1092" y="318" class="lbl" text-anchor="middle">get()</text>
+  <text x="1088" y="580" class="lbl" text-anchor="end">get()</text>
+
+  <!-- Trabajador 1 -->
+  <rect x="1140" y="160" width="400" height="290" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="1160" y="196" class="h">Trabajador 1 · proceso hijo</text>
+  <text x="1160" y="220" class="s">order-worker-1 · su PPID es el PID del servidor</text>
+  <rect x="1160" y="234" width="360" height="36" rx="18" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="1340" y="258" class="b" text-anchor="middle">MainThread: queue.get() y reparte a los hilos</text>
+  <text x="1160" y="296" class="s">ThreadPoolExecutor (--threads-per-worker)</text>
+  <g>
+    <rect x="1160" y="306" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <rect x="1252" y="306" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <rect x="1344" y="306" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <rect x="1436" y="306" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="1202" y="328" class="s" text-anchor="middle" style="fill:#1F2328">thread_0</text>
+    <text x="1294" y="328" class="s" text-anchor="middle" style="fill:#1F2328">thread_1</text>
+    <text x="1386" y="328" class="s" text-anchor="middle" style="fill:#1F2328">thread_2</text>
+    <text x="1478" y="328" class="s" text-anchor="middle" style="fill:#1F2328">thread_3</text>
+  </g>
+  <text x="1160" y="374" class="s">Cada hilo procesa un pedido completo:</text>
+  <text x="1160" y="398" class="bb">validar → inventario → factura → despacho</text>
+  <text x="1160" y="426" class="m">task_done() al terminar</text>
+
+  <!-- Trabajador 2 -->
+  <rect x="1140" y="480" width="400" height="290" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="1160" y="516" class="h">Trabajador 2 · proceso hijo</text>
+  <text x="1160" y="540" class="s">order-worker-2 · su PPID es el PID del servidor</text>
+  <rect x="1160" y="554" width="360" height="36" rx="18" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="1340" y="578" class="b" text-anchor="middle">MainThread: queue.get() y reparte a los hilos</text>
+  <text x="1160" y="616" class="s">ThreadPoolExecutor (--threads-per-worker)</text>
+  <g>
+    <rect x="1160" y="626" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <rect x="1252" y="626" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <rect x="1344" y="626" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <rect x="1436" y="626" width="84" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="1202" y="648" class="s" text-anchor="middle" style="fill:#1F2328">thread_0</text>
+    <text x="1294" y="648" class="s" text-anchor="middle" style="fill:#1F2328">thread_1</text>
+    <text x="1386" y="648" class="s" text-anchor="middle" style="fill:#1F2328">thread_2</text>
+    <text x="1478" y="648" class="s" text-anchor="middle" style="fill:#1F2328">thread_3</text>
+  </g>
+  <text x="1160" y="694" class="s">Cada hilo procesa un pedido completo:</text>
+  <text x="1160" y="718" class="bb">validar → inventario → factura → despacho</text>
+  <text x="1160" y="746" class="m">task_done() al terminar</text>
+
+  <!-- accesos al inventario -->
+  <path d="M1340,770 L1340,816" stroke="#2E7D4F" stroke-width="2.5" stroke-dasharray="7 5" fill="none" marker-end="url(#arr)"/>
+  <text x="1328" y="800" class="lbl" text-anchor="end">los hilos de ambos trabajadores leen y descuentan stock</text>
+  <path d="M580,670 L580,816" stroke="#2E7D4F" stroke-width="2.5" stroke-dasharray="7 5" fill="none" marker-end="url(#arr)"/>
+  <text x="592" y="760" class="lbl">al cerrar lee el stock final</text>
+  <text x="592" y="780" class="lbl">y compara esperado vs real</text>
+
+  <!-- Inventario compartido -->
+  <rect x="380" y="820" width="1160" height="140" rx="16" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="3"/>
+  <text x="405" y="858" class="h">Inventario compartido · memoria compartida</text>
+  <text x="405" y="882" class="m">multiprocessing RawArray (sin lock interno)</text>
+  <g>
+    <rect x="405" y="898" width="150" height="46" rx="8" fill="#FFFFFF" stroke="#2E7D4F"/>
+    <text x="480" y="920" class="s" text-anchor="middle" style="fill:#1F2328">PRODUCT-001</text>
+    <text x="480" y="938" class="bb" text-anchor="middle">100</text>
+    <rect x="565" y="898" width="150" height="46" rx="8" fill="#FFFFFF" stroke="#2E7D4F"/>
+    <text x="640" y="920" class="s" text-anchor="middle" style="fill:#1F2328">PRODUCT-002</text>
+    <text x="640" y="938" class="bb" text-anchor="middle">100</text>
+    <rect x="725" y="898" width="150" height="46" rx="8" fill="#FFFFFF" stroke="#2E7D4F"/>
+    <text x="800" y="920" class="s" text-anchor="middle" style="fill:#1F2328">PRODUCT-003</text>
+    <text x="800" y="938" class="bb" text-anchor="middle">100</text>
+  </g>
+  <rect x="930" y="836" width="590" height="112" rx="12" fill="#FFFFFF" stroke="#2E7D4F" stroke-width="2"/>
+  <text x="950" y="864" class="bb">inventory_lock · multiprocessing.Lock</text>
+  <text x="950" y="889" class="b">Protege la sección crítica: leer → validar → calcular → escribir</text>
+  <text x="950" y="914" class="s">Activo en los modos normal y safe · desactivado en --scenario race</text>
+  <text x="950" y="935" class="s">(stock inicial configurable con --initial-stock)</text>
+
+  <!-- Leyenda -->
+  <g>
+    <rect x="60" y="1010" width="26" height="20" rx="4" fill="#FFF4D1" stroke="#B8860B" stroke-width="2"/>
+    <text x="96" y="1026" class="s">Proceso</text>
+    <rect x="190" y="1010" width="26" height="20" rx="10" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="226" y="1026" class="s">Hilo</text>
+    <rect x="300" y="1010" width="26" height="20" rx="4" fill="#F1EAFB" stroke="#7A4FB8" stroke-width="2"/>
+    <text x="336" y="1026" class="s">Cola (sincronización productor-consumidor)</text>
+    <rect x="660" y="1010" width="26" height="20" rx="4" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="2"/>
+    <text x="696" y="1026" class="s">Recurso compartido y su lock</text>
+    <rect x="930" y="1010" width="26" height="20" rx="4" fill="#F4F5F7" stroke="#8C959F" stroke-width="2"/>
+    <text x="966" y="1026" class="s">Proceso externo</text>
+    <line x1="1110" y1="1020" x2="1160" y2="1020" stroke="#8C959F" stroke-width="2" stroke-dasharray="7 6"/>
+    <text x="1170" y="1026" class="s">Canal de control / acceso a memoria</text>
+  </g>
+</svg>

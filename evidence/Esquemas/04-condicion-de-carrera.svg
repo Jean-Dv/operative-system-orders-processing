@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <style>
+    text { font-family: 'Segoe UI', Arial, sans-serif; fill: #1F2328; }
+    .t { font-size: 34px; font-weight: 700; }
+    .st { font-size: 18px; fill: #57606A; }
+    .ph { font-size: 24px; font-weight: 700; }
+    .h { font-size: 18px; font-weight: 700; }
+    .b { font-size: 15px; }
+    .bb { font-size: 16px; font-weight: 700; }
+    .s { font-size: 14px; fill: #57606A; }
+    .m { font-family: Consolas, 'Courier New', monospace; font-size: 14px; }
+    .stk { font-size: 20px; font-weight: 700; }
+    .big { font-size: 30px; font-weight: 700; }
+  </style>
+  <rect width="1600" height="1000" fill="#FFFFFF"/>
+
+  <text x="60" y="62" class="t">Condición de carrera en el inventario y su corrección</text>
+  <text x="60" y="94" class="st">Dos hilos venden 1 unidad de PRODUCT-001 al mismo tiempo. Stock inicial: 100. Resultado correcto: 98.</text>
+
+  <!-- ================= ANTES ================= -->
+  <rect x="40" y="120" width="745" height="760" rx="18" fill="#FFFFFF" stroke="#C62828" stroke-width="3"/>
+  <rect x="40" y="120" width="745" height="60" rx="18" fill="#FDE8E8"/>
+  <rect x="40" y="160" width="745" height="20" fill="#FDE8E8"/>
+  <text x="65" y="160" class="ph" style="fill:#B71C1C">ANTES · sin exclusión mutua</text>
+  <text x="760" y="160" class="m" text-anchor="end">--scenario race</text>
+
+  <text x="170" y="220" class="h" text-anchor="middle">Hilo A</text>
+  <text x="412" y="220" class="h" text-anchor="middle">Stock compartido</text>
+  <text x="655" y="220" class="h" text-anchor="middle">Hilo B</text>
+  <line x1="412" y1="232" x2="412" y2="680" stroke="#D0D7DE" stroke-width="2" stroke-dasharray="4 5"/>
+
+  <!-- filas: y centros 265, 335, 405, 475, 545, 615 -->
+  <g>
+    <rect x="65" y="242" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="170" y="271" class="b" text-anchor="middle">lee stock = 100</text>
+    <rect x="372" y="245" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="412" y="272" class="stk" text-anchor="middle">100</text>
+
+    <rect x="372" y="315" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="412" y="342" class="stk" text-anchor="middle">100</text>
+    <rect x="550" y="312" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="655" y="341" class="b" text-anchor="middle">lee stock = 100</text>
+
+    <rect x="65" y="382" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="170" y="411" class="b" text-anchor="middle">calcula 100 − 1 = 99</text>
+    <rect x="372" y="385" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="412" y="412" class="stk" text-anchor="middle">100</text>
+    <rect x="550" y="382" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="655" y="411" class="b" text-anchor="middle">calcula 100 − 1 = 99</text>
+
+    <rect x="65" y="452" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="170" y="481" class="b" text-anchor="middle">escribe 99</text>
+    <rect x="372" y="455" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="412" y="482" class="stk" text-anchor="middle">99</text>
+
+    <rect x="372" y="525" width="80" height="40" rx="8" fill="#FDE8E8" stroke="#C62828" stroke-width="2"/>
+    <text x="412" y="552" class="stk" text-anchor="middle" style="fill:#B71C1C">99</text>
+    <rect x="550" y="522" width="210" height="46" rx="10" fill="#FDE8E8" stroke="#C62828" stroke-width="2"/>
+    <text x="655" y="551" class="b" text-anchor="middle">escribe 99 (sobrescribe)</text>
+  </g>
+  <text x="170" y="612" class="s" text-anchor="middle">La venta de A se pierde:</text>
+  <text x="170" y="632" class="s" text-anchor="middle">B escribió sobre un valor viejo</text>
+  <text x="655" y="612" class="s" text-anchor="middle">race_window: pausa entre leer</text>
+  <text x="655" y="632" class="s" text-anchor="middle">y escribir que amplía la ventana</text>
+
+  <rect x="65" y="700" width="695" height="160" rx="14" fill="#FDE8E8" stroke="#C62828" stroke-width="2"/>
+  <text x="90" y="742" class="big" style="fill:#B71C1C">Esperado 98 · Real 99</text>
+  <text x="90" y="772" class="bb">"Condicion de carrera detectada": actualización perdida</text>
+  <text x="90" y="806" class="b">Pruebas de carga: 75 / 396 / 827 actualizaciones perdidas</text>
+  <text x="90" y="830" class="b">con 100 / 500 / 1.000 pedidos · 1.066 pedidos/s (rápido, pero incorrecto)</text>
+
+  <!-- ================= DESPUÉS ================= -->
+  <rect x="815" y="120" width="745" height="760" rx="18" fill="#FFFFFF" stroke="#2E7D4F" stroke-width="3"/>
+  <rect x="815" y="120" width="745" height="60" rx="18" fill="#E6F4EA"/>
+  <rect x="815" y="160" width="745" height="20" fill="#E6F4EA"/>
+  <text x="840" y="160" class="ph" style="fill:#1B5E20">DESPUÉS · con inventory_lock</text>
+  <text x="1535" y="160" class="m" text-anchor="end">--scenario safe / normal</text>
+
+  <text x="945" y="220" class="h" text-anchor="middle">Hilo A</text>
+  <text x="1187" y="220" class="h" text-anchor="middle">Stock compartido</text>
+  <text x="1430" y="220" class="h" text-anchor="middle">Hilo B</text>
+  <line x1="1187" y1="232" x2="1187" y2="680" stroke="#D0D7DE" stroke-width="2" stroke-dasharray="4 5"/>
+
+  <!-- sección crítica de A -->
+  <rect x="832" y="236" width="226" height="200" rx="12" fill="none" stroke="#2E7D4F" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="945" y="452" class="s" text-anchor="middle">sección crítica de A</text>
+  <!-- sección crítica de B -->
+  <rect x="1317" y="446" width="226" height="200" rx="12" fill="none" stroke="#2E7D4F" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="1430" y="662" class="s" text-anchor="middle">sección crítica de B</text>
+
+  <g>
+    <rect x="840" y="242" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="945" y="271" class="b" text-anchor="middle">adquiere el lock</text>
+    <rect x="1147" y="245" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1187" y="272" class="stk" text-anchor="middle">100</text>
+    <rect x="1325" y="242" width="210" height="46" rx="10" fill="#F4F5F7" stroke="#8C959F"/>
+    <text x="1430" y="271" class="b" text-anchor="middle">pide el lock → ESPERA</text>
+
+    <rect x="840" y="312" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="945" y="341" class="b" text-anchor="middle">lee 100 → escribe 99</text>
+    <rect x="1147" y="315" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1187" y="342" class="stk" text-anchor="middle">99</text>
+    <rect x="1325" y="312" width="210" height="46" rx="10" fill="#F4F5F7" stroke="#8C959F"/>
+    <text x="1430" y="341" class="b" text-anchor="middle">bloqueado (durmiendo)</text>
+
+    <rect x="840" y="382" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="945" y="411" class="b" text-anchor="middle">libera el lock</text>
+    <rect x="1147" y="385" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1187" y="412" class="stk" text-anchor="middle">99</text>
+
+    <rect x="1147" y="455" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1187" y="482" class="stk" text-anchor="middle">99</text>
+    <rect x="1325" y="452" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1430" y="481" class="b" text-anchor="middle">adquiere el lock</text>
+
+    <rect x="1147" y="525" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1187" y="552" class="stk" text-anchor="middle">98</text>
+    <rect x="1325" y="522" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="1430" y="551" class="b" text-anchor="middle">lee 99 → escribe 98</text>
+
+    <rect x="1147" y="595" width="80" height="40" rx="8" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="2"/>
+    <text x="1187" y="622" class="stk" text-anchor="middle" style="fill:#1B5E20">98</text>
+    <rect x="1325" y="592" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1430" y="621" class="b" text-anchor="middle">libera el lock</text>
+  </g>
+
+  <rect x="840" y="700" width="695" height="160" rx="14" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="2"/>
+  <text x="865" y="742" class="big" style="fill:#1B5E20">Esperado 98 · Real 98</text>
+  <text x="865" y="772" class="bb">"Exclusion mutua verificada": 0 actualizaciones perdidas</text>
+  <text x="865" y="806" class="b">Costo: con 1.000 pedidos baja de 1.066 a 458 pedidos/s,</text>
+  <text x="865" y="830" class="b">porque solo un hilo a la vez puede tocar el inventario.</text>
+
+  <!-- causa -->
+  <text x="60" y="925" class="bb">Causa: leer → calcular → escribir no es una operación atómica; entre la lectura y la escritura otro hilo puede usar un valor ya obsoleto.</text>
+  <text x="60" y="955" class="b">Solución: exclusión mutua. El lock convierte esa secuencia en una sección crítica que solo un hilo ejecuta a la vez (las demás etapas siguen en paralelo).</text>
+</svg>

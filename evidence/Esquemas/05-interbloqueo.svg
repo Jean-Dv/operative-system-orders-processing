@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1060" viewBox="0 0 1600 1060">
+  <style>
+    text { font-family: 'Segoe UI', Arial, sans-serif; fill: #1F2328; }
+    .t { font-size: 34px; font-weight: 700; }
+    .st { font-size: 18px; fill: #57606A; }
+    .ph { font-size: 24px; font-weight: 700; }
+    .h { font-size: 18px; font-weight: 700; }
+    .b { font-size: 15px; }
+    .bb { font-size: 16px; font-weight: 700; }
+    .s { font-size: 14px; fill: #57606A; }
+    .m { font-family: Consolas, 'Courier New', monospace; font-size: 14px; }
+    .lblr { font-size: 15px; font-weight: 700; fill: #C62828; }
+    .lblg { font-size: 15px; font-weight: 700; fill: #2E7D4F; }
+    .lbl { font-size: 15px; font-weight: 600; fill: #57606A; }
+    .big { font-size: 26px; font-weight: 700; }
+  </style>
+  <defs>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E7D4F"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C62828"/>
+    </marker>
+    <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8C959F"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="1060" fill="#FFFFFF"/>
+
+  <text x="60" y="62" class="t">Interbloqueo por espera circular y su prevención</text>
+  <text x="60" y="94" class="st">Dos pedidos (dos hilos) necesitan los mismos dos recursos: inventory_lock e invoice_lock.</text>
+
+  <!-- ================= ANTES ================= -->
+  <rect x="40" y="120" width="745" height="780" rx="18" fill="#FFFFFF" stroke="#C62828" stroke-width="3"/>
+  <rect x="40" y="120" width="745" height="60" rx="18" fill="#FDE8E8"/>
+  <rect x="40" y="160" width="745" height="20" fill="#FDE8E8"/>
+  <text x="65" y="160" class="ph" style="fill:#B71C1C">ANTES · orden de adquisición opuesto</text>
+  <text x="760" y="160" class="m" text-anchor="end">--scenario deadlock</text>
+
+  <text x="65" y="215" class="m">Pedido A:  inventory_lock → invoice_lock</text>
+  <text x="65" y="240" class="m">Pedido B:  invoice_lock   → inventory_lock</text>
+
+  <!-- grafo: recursos arriba/abajo, hilos izquierda/derecha -->
+  <rect x="317" y="275" width="190" height="66" rx="10" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="3"/>
+  <text x="412" y="304" class="bb" text-anchor="middle">inventory_lock</text>
+  <text x="412" y="326" class="s" text-anchor="middle">recurso</text>
+
+  <rect x="317" y="545" width="190" height="66" rx="10" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="3"/>
+  <text x="412" y="574" class="bb" text-anchor="middle">invoice_lock</text>
+  <text x="412" y="596" class="s" text-anchor="middle">recurso</text>
+
+  <circle cx="165" cy="443" r="72" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="3"/>
+  <text x="165" y="438" class="bb" text-anchor="middle">Pedido A</text>
+  <text x="165" y="460" class="s" text-anchor="middle">deadlock-order-a</text>
+
+  <circle cx="660" cy="443" r="72" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="3"/>
+  <text x="660" y="438" class="bb" text-anchor="middle">Pedido B</text>
+  <text x="660" y="460" class="s" text-anchor="middle">deadlock-order-b</text>
+
+  <!-- inventory -> A (asignado) -->
+  <path d="M317,318 C250,330 205,350 188,372" fill="none" stroke="#2E7D4F" stroke-width="3" marker-end="url(#ag)"/>
+  <text x="200" y="330" class="lblg" text-anchor="end">asignado</text>
+  <!-- A -> invoice (espera) -->
+  <path d="M188,513 C205,540 250,560 314,574" fill="none" stroke="#C62828" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#ar)"/>
+  <text x="205" y="580" class="lblr" text-anchor="end">espera</text>
+  <!-- invoice -> B (asignado) -->
+  <path d="M507,574 C570,560 620,540 637,513" fill="none" stroke="#2E7D4F" stroke-width="3" marker-end="url(#ag)"/>
+  <text x="625" y="580" class="lblg">asignado</text>
+  <!-- B -> inventory (espera) -->
+  <path d="M637,372 C620,350 575,330 510,318" fill="none" stroke="#C62828" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#ar)"/>
+  <text x="625" y="330" class="lblr">espera</text>
+
+  <text x="412" y="448" class="big" text-anchor="middle" style="fill:#B71C1C">CICLO</text>
+  <text x="412" y="472" class="s" text-anchor="middle">nadie puede avanzar</text>
+
+  <!-- Coffman -->
+  <rect x="65" y="640" width="695" height="240" rx="14" fill="#FDE8E8" stroke="#C62828" stroke-width="2"/>
+  <text x="90" y="675" class="h">Se cumplen las 4 condiciones de Coffman</text>
+  <text x="90" y="708" class="b"><tspan font-weight="700">1. Exclusión mutua:</tspan> cada lock lo tiene un solo hilo a la vez.</text>
+  <text x="90" y="736" class="b"><tspan font-weight="700">2. Retención y espera:</tspan> cada hilo conserva su lock mientras pide el otro.</text>
+  <text x="90" y="764" class="b"><tspan font-weight="700">3. Sin expropiación:</tspan> nadie puede quitarle un lock a otro hilo.</text>
+  <text x="90" y="792" class="b"><tspan font-weight="700">4. Espera circular:</tspan> A espera a B y B espera a A.</text>
+  <text x="90" y="830" class="bb" style="fill:#B71C1C">Resultado: detected = true · ambos hilos quedan bloqueados</text>
+  <text x="90" y="856" class="s">Una Barrier obliga a que los dos tomen su primer lock antes de pedir el segundo.</text>
+
+  <!-- ================= DESPUÉS ================= -->
+  <rect x="815" y="120" width="745" height="780" rx="18" fill="#FFFFFF" stroke="#2E7D4F" stroke-width="3"/>
+  <rect x="815" y="120" width="745" height="60" rx="18" fill="#E6F4EA"/>
+  <rect x="815" y="160" width="745" height="20" fill="#E6F4EA"/>
+  <text x="840" y="160" class="ph" style="fill:#1B5E20">DESPUÉS · orden global de locks</text>
+  <text x="1535" y="160" class="m" text-anchor="end">--scenario deadlock-safe</text>
+
+  <text x="840" y="215" class="m">Pedido A:  inventory_lock → invoice_lock</text>
+  <text x="840" y="240" class="m">Pedido B:  inventory_lock → invoice_lock</text>
+
+  <!-- línea de tiempo -->
+  <text x="945" y="290" class="h" text-anchor="middle">Pedido A</text>
+  <text x="1430" y="290" class="h" text-anchor="middle">Pedido B</text>
+  <g>
+    <rect x="840" y="305" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="945" y="334" class="b" text-anchor="middle">toma inventory_lock</text>
+    <rect x="1325" y="305" width="210" height="46" rx="10" fill="#F4F5F7" stroke="#8C959F"/>
+    <text x="1430" y="334" class="b" text-anchor="middle">pide inventory_lock → espera</text>
+
+    <rect x="840" y="365" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="945" y="394" class="b" text-anchor="middle">toma invoice_lock</text>
+    <rect x="1325" y="365" width="210" height="46" rx="10" fill="#F4F5F7" stroke="#8C959F"/>
+    <text x="1430" y="394" class="b" text-anchor="middle">espera (sin retener nada)</text>
+
+    <rect x="840" y="425" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="945" y="454" class="b" text-anchor="middle">completa ORDER-A</text>
+
+    <rect x="840" y="485" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="945" y="514" class="b" text-anchor="middle">libera ambos locks</text>
+    <path d="M1050,508 L1321,508" stroke="#8C959F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#an)"/>
+    <rect x="1325" y="485" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1430" y="514" class="b" text-anchor="middle">toma inventory_lock</text>
+
+    <rect x="1325" y="545" width="210" height="46" rx="10" fill="#E6F4EA" stroke="#2E7D4F"/>
+    <text x="1430" y="574" class="b" text-anchor="middle">toma invoice_lock</text>
+    <rect x="1325" y="605" width="210" height="46" rx="10" fill="#E3EEFA" stroke="#2F6FB3"/>
+    <text x="1430" y="634" class="b" text-anchor="middle">completa ORDER-B</text>
+  </g>
+  <text x="1187" y="420" class="s" text-anchor="middle">B espera, pero</text>
+  <text x="1187" y="440" class="s" text-anchor="middle">no retiene invoice_lock:</text>
+  <text x="1187" y="460" class="s" text-anchor="middle">no hay ciclo</text>
+
+  <rect x="840" y="680" width="695" height="200" rx="14" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="2"/>
+  <text x="865" y="715" class="h">Se rompe la condición 4 (espera circular)</text>
+  <text x="865" y="746" class="b">Si todos piden los recursos en el mismo orden, nadie puede tener</text>
+  <text x="865" y="770" class="b">invoice_lock mientras espera inventory_lock. No depende de timeouts.</text>
+  <text x="865" y="808" class="bb" style="fill:#1B5E20">Resultado: prevented = true · deadlock_detected = false</text>
+  <text x="865" y="832" class="bb" style="fill:#1B5E20">circular_wait = false · completados ORDER-A y ORDER-B</text>
+
+  <!-- nota -->
+  <rect x="40" y="925" width="1520" height="110" rx="14" fill="#F4F5F7" stroke="#8C959F"/>
+  <text x="65" y="958" class="bb">Cómo se ejecuta la demostración</text>
+  <text x="65" y="986" class="b">Corre en un proceso hijo aislado (deadlock-simulation) con 2 hilos. El proceso padre espera --deadlock-timeout segundos, registra el diagnóstico y termina el hijo.</text>
+  <text x="65" y="1012" class="b">Para observarlo con ps / top -H, usa un timeout largo:  <tspan class="m">python -m src.main --scenario deadlock --deadlock-timeout 60 --json</tspan></text>
+</svg>

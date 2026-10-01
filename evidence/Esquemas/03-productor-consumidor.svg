@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <style>
+    text { font-family: 'Segoe UI', Arial, sans-serif; fill: #1F2328; }
+    .t { font-size: 34px; font-weight: 700; }
+    .st { font-size: 18px; fill: #57606A; }
+    .sec { font-size: 22px; font-weight: 700; fill: #57606A; }
+    .h { font-size: 20px; font-weight: 700; }
+    .b { font-size: 16px; }
+    .bb { font-size: 16px; font-weight: 700; }
+    .s { font-size: 14px; fill: #57606A; }
+    .m { font-family: Consolas, 'Courier New', monospace; font-size: 14px; }
+    .lbl { font-size: 15px; font-weight: 600; fill: #57606A; }
+    .num { font-size: 22px; font-weight: 700; fill: #FFFFFF; }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606A"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="1000" fill="#FFFFFF"/>
+
+  <text x="60" y="62" class="t">Cola productor-consumidor y recorrido de un pedido</text>
+  <text x="60" y="94" class="st">Cada pedido entra una sola vez a la cola y un solo consumidor lo retira: así no se procesa dos veces.</text>
+
+  <!-- ===== Fila 1: productor-consumidor ===== -->
+  <text x="60" y="150" class="sec">1. Productor → búfer → consumidores</text>
+
+  <rect x="60" y="175" width="280" height="150" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="80" y="210" class="h">PRODUCTOR</text>
+  <text x="80" y="236" class="b">Proceso principal (servidor)</text>
+  <text x="80" y="262" class="s">recibe, valida y registra</text>
+  <text x="80" y="300" class="m">queue.put(pedido)</text>
+
+  <path d="M340,250 L416,250" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <rect x="420" y="175" width="360" height="150" rx="16" fill="#F1EAFB" stroke="#7A4FB8" stroke-width="3"/>
+  <text x="600" y="210" class="h" text-anchor="middle">BÚFER · JoinableQueue</text>
+  <g fill="#FFFFFF" stroke="#7A4FB8" stroke-width="1.5">
+    <rect x="450" y="228" width="44" height="44" rx="6"/>
+    <rect x="502" y="228" width="44" height="44" rx="6"/>
+    <rect x="554" y="228" width="44" height="44" rx="6"/>
+    <rect x="606" y="228" width="44" height="44" rx="6"/>
+    <rect x="658" y="228" width="44" height="44" rx="6" fill="#F1EAFB"/>
+    <rect x="710" y="228" width="44" height="44" rx="6" fill="#F1EAFB"/>
+  </g>
+  <text x="472" y="256" class="s" text-anchor="middle">P4</text>
+  <text x="524" y="256" class="s" text-anchor="middle">P3</text>
+  <text x="576" y="256" class="s" text-anchor="middle">P2</text>
+  <text x="628" y="256" class="s" text-anchor="middle">P1</text>
+  <text x="600" y="302" class="s" text-anchor="middle">capacidad limitada: --queue-capacity</text>
+
+  <path d="M780,250 L856,250" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <rect x="860" y="175" width="300" height="150" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="880" y="210" class="h">CONSUMIDORES</text>
+  <text x="880" y="236" class="b">MainThread de cada trabajador</text>
+  <text x="880" y="262" class="s">compiten por el siguiente pedido</text>
+  <text x="880" y="300" class="m">pedido = queue.get()</text>
+
+  <path d="M1160,250 L1236,250" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="1198" y="238" class="lbl" text-anchor="middle">submit</text>
+
+  <rect x="1240" y="175" width="300" height="150" rx="16" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="3"/>
+  <text x="1260" y="210" class="h">HILO del pool</text>
+  <text x="1260" y="236" class="b">worker-N-thread_i</text>
+  <text x="1260" y="262" class="s">ejecuta las 4 etapas (fila 2)</text>
+  <text x="1260" y="300" class="m">queue.task_done()</text>
+
+  <!-- reglas de bloqueo -->
+  <rect x="60" y="350" width="720" height="92" rx="12" fill="#F7F3FD" stroke="#C9B6E8"/>
+  <text x="80" y="380" class="bb">Cola llena → put() bloquea al productor hasta que haya espacio</text>
+  <text x="80" y="406" class="bb">Cola vacía → get() bloquea al consumidor (duerme, no gasta CPU)</text>
+  <text x="80" y="430" class="s">Queue.get() es atómico: dos consumidores nunca reciben el mismo pedido.</text>
+  <rect x="860" y="350" width="680" height="92" rx="12" fill="#F2F7FD" stroke="#B6CCE8"/>
+  <text x="880" y="380" class="bb">Si todos los hilos del trabajador están ocupados,</text>
+  <text x="880" y="406" class="bb">su MainThread espera a que uno termine antes de tomar otro.</text>
+  <text x="880" y="430" class="s">Así cada trabajador no retira más pedidos de los que puede atender.</text>
+
+  <!-- ===== Fila 2: etapas ===== -->
+  <text x="60" y="505" class="sec">2. Etapas de cada pedido dentro del hilo</text>
+  <text x="60" y="530" class="s">La demora --processing-delay se reparte entre las 4 etapas.</text>
+
+  <g>
+    <rect x="60" y="550" width="300" height="170" rx="16" fill="#FFFFFF" stroke="#8C959F" stroke-width="2"/>
+    <circle cx="100" cy="590" r="22" fill="#57606A"/>
+    <text x="100" y="598" class="num" text-anchor="middle">1</text>
+    <text x="135" y="597" class="h">Validación</text>
+    <text x="80" y="640" class="b">El producto existe</text>
+    <text x="80" y="666" class="s">Si no, el pedido queda</text>
+    <text x="80" y="688" class="s">rejected y no toca el stock</text>
+
+    <path d="M360,635 L396,635" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <rect x="400" y="550" width="380" height="170" rx="16" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="3"/>
+    <circle cx="440" cy="590" r="22" fill="#2E7D4F"/>
+    <text x="440" y="598" class="num" text-anchor="middle">2</text>
+    <text x="475" y="597" class="h">Inventario · SECCIÓN CRÍTICA</text>
+    <text x="420" y="640" class="b">leer stock → validar → calcular → escribir</text>
+    <text x="420" y="666" class="s">Protegida por inventory_lock (modos normal y safe).</text>
+    <text x="420" y="688" class="s">En --scenario race se ejecuta sin lock: aquí ocurre</text>
+    <text x="420" y="708" class="s">la condición de carrera.</text>
+
+    <path d="M780,635 L816,635" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <rect x="820" y="550" width="300" height="170" rx="16" fill="#FFFFFF" stroke="#8C959F" stroke-width="2"/>
+    <circle cx="860" cy="590" r="22" fill="#57606A"/>
+    <text x="860" y="598" class="num" text-anchor="middle">3</text>
+    <text x="895" y="597" class="h">Factura</text>
+    <text x="840" y="640" class="b">Total = precio × cantidad</text>
+    <text x="840" y="666" class="m">INV-&lt;order_id&gt;</text>
+    <text x="840" y="690" class="s">No usa recursos compartidos</text>
+
+    <path d="M1120,635 L1156,635" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <rect x="1160" y="550" width="380" height="170" rx="16" fill="#FFFFFF" stroke="#8C959F" stroke-width="2"/>
+    <circle cx="1200" cy="590" r="22" fill="#57606A"/>
+    <text x="1200" y="598" class="num" text-anchor="middle">4</text>
+    <text x="1235" y="597" class="h">Despacho</text>
+    <text x="1180" y="640" class="b">Genera la guía de envío</text>
+    <text x="1180" y="666" class="m">DSP-&lt;order_id&gt;</text>
+    <text x="1180" y="690" class="s">Estado final: ready_for_dispatch</text>
+  </g>
+
+  <!-- ===== Fila 3: cierre ===== -->
+  <text x="60" y="785" class="sec">3. Cierre ordenado del sistema (Ctrl+C o --max-orders)</text>
+  <g>
+    <rect x="60" y="805" width="340" height="130" rx="14" fill="#F1EAFB" stroke="#7A4FB8" stroke-width="2"/>
+    <text x="80" y="840" class="bb">a) queue.join()</text>
+    <text x="80" y="866" class="s">Espera a que cada pedido encolado</text>
+    <text x="80" y="888" class="s">tenga su task_done().</text>
+    <path d="M400,870 L436,870" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <rect x="440" y="805" width="340" height="130" rx="14" fill="#F1EAFB" stroke="#7A4FB8" stroke-width="2"/>
+    <text x="460" y="840" class="bb">b) put(None) por trabajador</text>
+    <text x="460" y="866" class="s">Centinela: al recibir None, el</text>
+    <text x="460" y="888" class="s">consumidor sale de su ciclo.</text>
+    <path d="M780,870 L816,870" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <rect x="820" y="805" width="340" height="130" rx="14" fill="#FFF4D1" stroke="#B8860B" stroke-width="2"/>
+    <text x="840" y="840" class="bb">c) Resultados por Pipe</text>
+    <text x="840" y="866" class="s">Cada trabajador envía sus pedidos</text>
+    <text x="840" y="888" class="s">procesados y termina (join).</text>
+    <path d="M1160,870 L1196,870" stroke="#57606A" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <rect x="1200" y="805" width="340" height="130" rx="14" fill="#E6F4EA" stroke="#2E7D4F" stroke-width="2"/>
+    <text x="1220" y="840" class="bb">d) Verificación final</text>
+    <text x="1220" y="866" class="s">Compara stock esperado vs real:</text>
+    <text x="1220" y="888" class="s">"Exclusión mutua verificada" o</text>
+    <text x="1220" y="910" class="s">"Condición de carrera detectada".</text>
+  </g>
+</svg>

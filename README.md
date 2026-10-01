@@ -223,7 +223,12 @@ virtual. Los artefactos quedan en `evidence/load-tests/`:
 - `resource-samples.json`: serie temporal de PID, PPID, hilos, CPU y memoria;
 - `trace-excerpts.json`: fragmentos de las trazas demostrativas.
 
-La presentación de resultados, metodología y soluciones está disponible como
-[PowerPoint editable con estilo UPTC](docs/presentacion-procesamiento-pedidos-uptc.pptx),
-[PDF local](docs/presentacion-procesamiento-pedidos.pdf) y como
-[diseño editable en Canva](https://canva.link/98qijdlpmst2ims).
+La presentación de resultados, metodología y soluciones está disponible en
+[docs/presentacion-procesamiento-pedidos-uptc.pptx](docs/presentacion-procesamiento-pedidos-uptc.pptx).
+
+El informe técnico en formato APA está en
+[docs/informe-tecnico-proyecto1.docx](docs/informe-tecnico-proyecto1.docx).
+Las capturas de evidencia con su explicación están en
+[evidence/README.md](evidence/README.md), los diagramas en
+[evidence/Esquemas](evidence/Esquemas/README.md) y la guía para la demostración en
+vivo en [docs/guia-sustentacion.md](docs/guia-sustentacion.md).

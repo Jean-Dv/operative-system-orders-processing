@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1060" viewBox="0 0 1600 1060">
+  <style>
+    text { font-family: 'Segoe UI', Arial, sans-serif; fill: #1F2328; }
+    .t { font-size: 34px; font-weight: 700; }
+    .st { font-size: 18px; fill: #57606A; }
+    .h { font-size: 21px; font-weight: 700; }
+    .b { font-size: 16px; }
+    .bb { font-size: 16px; font-weight: 700; }
+    .s { font-size: 14px; fill: #57606A; }
+    .m { font-family: Consolas, 'Courier New', monospace; font-size: 14px; }
+    .pid { font-family: Consolas, 'Courier New', monospace; font-size: 16px; font-weight: 700; fill: #8A6408; }
+  </style>
+  <rect width="1600" height="1060" fill="#FFFFFF"/>
+
+  <text x="60" y="62" class="t">Jerarquía de procesos e hilos</text>
+  <text x="60" y="94" class="st">PID reales de la corrida concurrente con 1.000 pedidos (2 trabajadores × 4 hilos). Los PID cambian en cada ejecución.</text>
+
+  <!-- Lanzador -->
+  <rect x="560" y="130" width="480" height="84" rx="14" fill="#F4F5F7" stroke="#8C959F" stroke-width="2"/>
+  <text x="800" y="164" class="bb" text-anchor="middle">Proceso que lanza el sistema</text>
+  <text x="800" y="190" class="s" text-anchor="middle">terminal bash, o scripts/run_experiments.py en las pruebas · <tspan class="pid">PID 143596</tspan></text>
+
+  <line x1="800" y1="214" x2="800" y2="270" stroke="#57606A" stroke-width="2.5"/>
+
+  <!-- Servidor -->
+  <rect x="480" y="270" width="640" height="150" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="505" y="306" class="h">Servidor · proceso principal</text>
+  <text x="1095" y="306" class="pid" text-anchor="end">PID 145156 · PPID 143596</text>
+  <text x="505" y="332" class="m">python -m src.main --workers 2 --threads-per-worker 4</text>
+  <rect x="505" y="352" width="160" height="40" rx="20" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="585" y="378" class="b" text-anchor="middle">MainThread</text>
+  <rect x="677" y="352" width="200" height="40" rx="20" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="777" y="378" class="b" text-anchor="middle">QueueFeederThread</text>
+  <text x="895" y="370" class="bb">= 2 hilos</text>
+  <text x="895" y="392" class="s">el feeder aparece con el 1.er put()</text>
+
+  <!-- ramas -->
+  <path d="M800,420 L800,470 M380,470 L1330,470 M380,470 L380,520 M860,470 L860,520 M1330,470 L1330,520" stroke="#57606A" stroke-width="2.5" fill="none"/>
+
+  <!-- Trabajador 1 -->
+  <rect x="160" y="520" width="440" height="260" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="182" y="556" class="h">Trabajador 1</text>
+  <text x="578" y="556" class="pid" text-anchor="end">PID 145158 · PPID 145156</text>
+  <text x="182" y="580" class="m">order-worker-1 (proceso hijo, spawn)</text>
+  <g>
+    <rect x="182" y="598" width="396" height="36" rx="18" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="380" y="622" class="b" text-anchor="middle">MainThread · consume con queue.get()</text>
+    <rect x="182" y="644" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="278" y="667" class="b" text-anchor="middle">worker-1-thread_0</text>
+    <rect x="386" y="644" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="482" y="667" class="b" text-anchor="middle">worker-1-thread_1</text>
+    <rect x="182" y="688" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="278" y="711" class="b" text-anchor="middle">worker-1-thread_2</text>
+    <rect x="386" y="688" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="482" y="711" class="b" text-anchor="middle">worker-1-thread_3</text>
+  </g>
+  <text x="182" y="758" class="bb">= 5 hilos</text>
+  <text x="270" y="758" class="s">comparten la memoria del proceso</text>
+
+  <!-- Trabajador 2 -->
+  <rect x="640" y="520" width="440" height="260" rx="16" fill="#FFF4D1" stroke="#B8860B" stroke-width="3"/>
+  <text x="662" y="556" class="h">Trabajador 2</text>
+  <text x="1058" y="556" class="pid" text-anchor="end">PID 145159 · PPID 145156</text>
+  <text x="662" y="580" class="m">order-worker-2 (proceso hijo, spawn)</text>
+  <g>
+    <rect x="662" y="598" width="396" height="36" rx="18" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="860" y="622" class="b" text-anchor="middle">MainThread · consume con queue.get()</text>
+    <rect x="662" y="644" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="758" y="667" class="b" text-anchor="middle">worker-2-thread_0</text>
+    <rect x="866" y="644" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="962" y="667" class="b" text-anchor="middle">worker-2-thread_1</text>
+    <rect x="662" y="688" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="758" y="711" class="b" text-anchor="middle">worker-2-thread_2</text>
+    <rect x="866" y="688" width="192" height="34" rx="17" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+    <text x="962" y="711" class="b" text-anchor="middle">worker-2-thread_3</text>
+  </g>
+  <text x="662" y="758" class="bb">= 5 hilos</text>
+  <text x="750" y="758" class="s">comparten la memoria del proceso</text>
+
+  <!-- resource tracker -->
+  <rect x="1140" y="520" width="380" height="170" rx="16" fill="#F4F5F7" stroke="#8C959F" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="1162" y="556" class="h">resource_tracker</text>
+  <text x="1498" y="556" class="pid" text-anchor="end">PPID 145156</text>
+  <text x="1162" y="582" class="s">Proceso auxiliar que crea multiprocessing</text>
+  <text x="1162" y="604" class="s">para liberar semáforos y memoria compartida</text>
+  <text x="1162" y="626" class="s">al terminar. No procesa pedidos.</text>
+  <text x="1162" y="660" class="bb">Aparece en pstree: no es un trabajador</text>
+
+  <!-- Clientes -->
+  <rect x="1140" y="720" width="380" height="150" rx="16" fill="#F4F5F7" stroke="#8C959F" stroke-width="2"/>
+  <text x="1162" y="756" class="h">Clientes</text>
+  <text x="1162" y="780" class="m">python -m src.client</text>
+  <text x="1162" y="806" class="s">Procesos independientes. Su PPID es la terminal</text>
+  <text x="1162" y="828" class="s">desde donde se lanzan, NO el servidor.</text>
+  <text x="1162" y="850" class="s">Solo se comunican por TCP.</text>
+
+  <!-- Resumen -->
+  <rect x="160" y="810" width="920" height="200" rx="16" fill="#E3EEFA" stroke="#2F6FB3" stroke-width="2"/>
+  <text x="185" y="846" class="h">Conteo de hilos (columna NLWP de ps / "Hilos pico" de las pruebas)</text>
+  <text x="185" y="878" class="b">Concurrente (2 × 4):  2 servidor + 5 trabajador 1 + 5 trabajador 2 = <tspan font-weight="700">12 hilos</tspan></text>
+  <text x="185" y="904" class="b">Secuencial (1 × 1):   2 servidor + 2 trabajador = <tspan font-weight="700">4 hilos</tspan></text>
+  <text x="185" y="940" class="s">Comandos para comprobarlo en Linux:</text>
+  <text x="185" y="964" class="m">pstree -p &lt;PID_servidor&gt;</text>
+  <text x="505" y="964" class="m">ps -o pid,ppid,nlwp,cmd --ppid &lt;PID_servidor&gt;</text>
+  <text x="185" y="988" class="m">ps -eLf | grep python</text>
+  <text x="505" y="988" class="m">ls /proc/&lt;PID_trabajador&gt;/task</text>
+</svg>
